@@ -1,26 +1,54 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Backgrounds: #FAFAF8 (warm off-white) & Pure White */
+    --background: 60 13% 98%;
+    --foreground: 0 0% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 4%;
+    --popover: 60 13% 98%;
+    --popover-foreground: 0 0% 4%;
+
+    /* Terracotta Accent: #C1440E */
+    --primary: 18 86% 41%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Warm Stone Borders/Secondary elements: #E8E4DC */
+    --secondary: 40 19% 89%;
+    --secondary-foreground: 0 0% 4%;
+
+    /* Typography Meta & Body Grays */
+    --muted: 42 11% 57%;       /* #9C9585 Meta Text */
+    --muted-foreground: 35 7% 34%; /* #5C5750 Body Text */
+    --accent: 18 86% 41%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders matching Warm Stone */
+    --border: 40 19% 89%;
+    --input: 40 19% 89%;
+    --ring: 18 86% 41%;
+
+    /* NON-NEGOTIABLE SHARP EDGES FOR ALL primitive libraries */
+    --radius: 0px;
   }
 }
 
+* {
+  @apply border-border;
+}
+
+html {
+  scroll-behavior: smooth;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  @apply bg-stone-50 font-sans text-stone-900 antialiased;
 }
