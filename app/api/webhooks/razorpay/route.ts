@@ -71,14 +71,14 @@ export async function POST(request: Request): Promise<NextResponse> {
         db.order.update({
           where: { id: order.id },
           data: {
-            paymentStatus: "SUCCESS" as PaymentStatus // Updates order payment status to SUCCESS enum
+            paymentStatus: PaymentStatus.CAPTURED
           }
         }),
         db.payment.updateMany({
           where: { orderId: order.id },
           data: {
-            status: "CAPTURED",
-            gatewayPaymentId: rzpPaymentId
+            status: PaymentStatus.CAPTURED,
+            providerPaymentId: rzpPaymentId
           }
         })
       ]);

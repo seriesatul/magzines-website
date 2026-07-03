@@ -4,10 +4,9 @@ import React from "react";
 import Link from "next/link";
 import { ProductGrid } from "@/components/storefront/ProductGrid";
 import { RevealOnScroll } from "@/components/storefront/RevealOnScroll";
-import { getStorefrontProducts } from "@/lib/products";
+import type { StorefrontProduct } from "@/lib/products";
 
-// Dynamically extract the exact compiled type returned by your server fetcher
-export type StorefrontProduct = Awaited<ReturnType<typeof getStorefrontProducts>>[number];
+export type { StorefrontProduct };
 
 interface FeaturesProps {
   products: StorefrontProduct[];

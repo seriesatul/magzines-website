@@ -1,60 +1,74 @@
 import React from "react";
-import { revalidatePath } from "next/cache";
+import Link from "next/link";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { Box, CheckCircle, ChevronDown, ExternalLink, Image as ImageIcon, Plus, Save, Trash2, XCircle } from "lucide-react";
+import { ProductImageUploader, type ProductImageUploaderItem } from "@/components/admin/ProductImageUploader";
 import { db } from "@/server/db/client";
 import { formatPaise } from "@/server/db/money";
 import { logger } from "@/server/logger/logger";
-import { Package, Save, CheckCircle, XCircle } from "lucide-react";
-import Image from "next/image";
+import { parseProductForm, parseProductImages } from "./product-form";
 
-export const revalidate = 0; // Dynamic server component, always loads fresh stock levels
+export const revalidate = 0;
+
+function revalidateProductViews(): void {
+  revalidatePath("/admin/products");
+  revalidatePath("/products");
+  revalidatePath("/", "layout");
+  revalidateTag("products");
+}
 
 export default async function AdminProductsPage(): Promise<React.JSX.Element> {
-  // Fetch all custom magazine products with their image relations
-  const products = await db.product.findMany({
-    where: { deletedAt: null },
-    orderBy: { createdAt: "desc" },
-    include: {
-      images: {
-        orderBy: { sortOrder: "asc" },
-        take: 1
+  const [products, categories] = await Promise.all([
+    db.product.findMany({
+      where: { deletedAt: null },
+      orderBy: [{ createdAt: "desc" }],
+      include: {
+        category: true,
+        images: {
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
+        }
       }
-    }
-  });
+    }),
+    db.category.findMany({
+      orderBy: { name: "asc" }
+    })
+  ]);
 
-  // Server Action: Handles instant, inline product updates securely on the server (Rule 7.6)
-  async function updateProductDetails(formData: FormData) {
+  async function updateProduct(formData: FormData) {
     "use server";
-    const id = formData.get("id") as string;
-    const basePriceInput = formData.get("basePrice") as string;
-    const salePriceInput = formData.get("salePrice") as string;
-    const stockInput = formData.get("stockQuantity") as string;
-    const isActiveInput = formData.get("isActive") === "true";
 
-    if (!id) return;
+    const id = String(formData.get("id") || "");
+    if (!id) {
+      return;
+    }
 
     try {
-      // Convert rupee inputs safely to integer Paise (Rule 2)
-      const basePricePaise = Math.floor(parseFloat(basePriceInput) * 100);
-      const salePricePaise = salePriceInput ? Math.floor(parseFloat(salePriceInput) * 100) : null;
-      const stockQuantity = parseInt(stockInput, 10);
+      const productInput = parseProductForm(formData);
+      const imageInput = parseProductImages(formData, productInput.name);
 
-      if (isNaN(basePricePaise) || isNaN(stockQuantity)) {
-        throw new Error("Invalid pricing or stock levels submitted.");
-      }
+      await db.$transaction(async (tx) => {
+        await tx.product.update({
+          where: { id },
+          data: productInput
+        });
 
-      logger.info({ productId: id, basePricePaise, stockQuantity }, "Admin updating product details");
+        await tx.productImage.deleteMany({
+          where: { productId: id }
+        });
 
-      await db.product.update({
-        where: { id },
-        data: {
-          basePricePaise,
-          salePricePaise: salePricePaise || null,
-          stockQuantity,
-          isActive: isActiveInput
+        if (imageInput.length > 0) {
+          await tx.productImage.createMany({
+            data: imageInput.map((image) => ({
+              productId: id,
+              url: image.url,
+              alt: image.alt,
+              sortOrder: image.sortOrder
+            }))
+          });
         }
       });
 
-      revalidatePath("/admin/products");
+      revalidateProductViews();
     } catch (error) {
       logger.error(
         { productId: id, error: error instanceof Error ? error.message : String(error) },
@@ -63,133 +77,451 @@ export default async function AdminProductsPage(): Promise<React.JSX.Element> {
     }
   }
 
+  async function archiveProduct(formData: FormData) {
+    "use server";
+
+    const id = String(formData.get("id") || "");
+    if (!id) {
+      return;
+    }
+
+    try {
+      await db.product.update({
+        where: { id },
+        data: {
+          isActive: false,
+          deletedAt: new Date()
+        }
+      });
+
+      revalidateProductViews();
+    } catch (error) {
+      logger.error(
+        { productId: id, error: error instanceof Error ? error.message : String(error) },
+        "Admin product archive failed"
+      );
+    }
+  }
+
   return (
-    <div className="space-y-8 bg-white border border-stone-200 p-6 md:p-8 rounded-none">
-      
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-stone-100 pb-6 gap-4">
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 text-brand">
-            <Package className="h-4 w-4" />
-            <span className="text-xs font-bold uppercase tracking-wider">Catalog Center</span>
+    <div className="space-y-8">
+      <div className="border border-stone-200 bg-white p-6 md:p-8 rounded-none">
+        <div className="flex flex-col gap-6 border-b border-stone-100 pb-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-brand">
+              <Box className="h-4 w-4" />
+              <span className="text-xs font-bold uppercase tracking-wider">Catalog Center</span>
+            </div>
+            <h1 className="font-serif text-3xl font-black leading-none tracking-tight text-stone-900 md:text-4xl">
+              Product <span className="font-normal italic text-stone-700">CMS</span>
+            </h1>
+            <p className="max-w-[65ch] text-xs font-light leading-6 text-stone-500">
+              Manage pricing, inventory, content, and complete image sequences for every magazine format.
+            </p>
           </div>
-          <h1 className="font-serif text-3xl font-black text-stone-900 tracking-tight leading-none">
-            Manage <span className="font-normal italic text-stone-700">Magazines</span>
-          </h1>
-          <p className="text-xs font-light text-stone-500">
-            Edit stock levels, active visibility, and customer pricing directly in-place
-          </p>
+
+          <Link
+            href="/admin/products/new"
+            className="inline-flex h-11 items-center justify-center gap-2 bg-stone-900 px-6 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand rounded-none"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Product
+          </Link>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="border border-stone-200 bg-[#FAFAF8] p-3 rounded-none">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Products</p>
+            <p className="mt-2 font-serif text-2xl font-black text-stone-900">{products.length}</p>
+          </div>
+          <div className="border border-stone-200 bg-[#FAFAF8] p-3 rounded-none">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Active</p>
+            <p className="mt-2 font-serif text-2xl font-black text-stone-900">
+              {products.filter((product) => product.isActive).length}
+            </p>
+          </div>
+          <div className="border border-stone-200 bg-[#FAFAF8] p-3 rounded-none">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Images</p>
+            <p className="mt-2 font-serif text-2xl font-black text-stone-900">
+              {products.reduce((total, product) => total + product.images.length, 0)}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Inline-Edit Products List */}
-      <div className="space-y-6">
-        {products.length === 0 ? (
-          <p className="text-xs text-stone-400 font-light py-8 text-center">No products found in catalog.</p>
-        ) : (
-          <div className="space-y-6">
-            {products.map((product) => {
-              const coverImage = product.images[0]?.url || "https://images.unsplash.com/photo-1544816155-12df9643f363?q=80&w=1200";
+      {products.length === 0 ? (
+        <div className="border border-dashed border-stone-300 bg-white p-10 rounded-none">
+          <p className="font-serif text-3xl italic text-stone-400">No products in the catalog yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {products.map((product) => {
+            const initialImages: Array<ProductImageUploaderItem> = product.images.map((image) => ({
+              id: image.id,
+              url: image.url,
+              alt: image.alt,
+              sortOrder: image.sortOrder
+            }));
 
-              return (
-                <form
-                  key={product.id}
-                  action={updateProductDetails}
-                  className="border border-stone-200 p-5 rounded-none flex flex-col lg:flex-row gap-6 items-start lg:items-center bg-[#FAFAF8]"
-                >
+            return (
+              <details
+                key={product.id}
+                className="group border border-stone-200 bg-white rounded-none"
+              >
+                <summary className="grid cursor-pointer list-none gap-4 p-4 transition hover:bg-[#FAFAF8] md:grid-cols-[72px_minmax(0,1fr)_auto] md:items-center [&::-webkit-details-marker]:hidden">
+                  <div className="h-20 w-16 overflow-hidden border border-stone-200 bg-[#FAFAF8] rounded-none">
+                    {product.images[0]?.url ? (
+                      <img
+                        src={product.images[0].url}
+                        alt={product.images[0].alt || product.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <ImageIcon className="h-5 w-5 text-stone-300" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="min-w-0 space-y-3">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0">
+                        <h2 className="truncate font-serif text-2xl font-black leading-none text-stone-900">
+                          {product.name}
+                        </h2>
+                        <p className="mt-1 truncate text-[10px] font-mono text-stone-400">{product.slug}</p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wider">
+                        <span className="border border-stone-200 px-2 py-1 text-stone-500 rounded-none">
+                          {product.category?.name || "No category"}
+                        </span>
+                        <span
+                          className={`border px-2 py-1 rounded-none ${
+                            product.isActive
+                              ? "border-emerald-800/20 text-emerald-700"
+                              : "border-red-900/20 text-red-700"
+                          }`}
+                        >
+                          {product.isActive ? "Active" : "Hidden"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2 text-[10px] font-bold uppercase tracking-widest text-stone-400 sm:grid-cols-4">
+                      <span>
+                        Price{" "}
+                        <strong className="block pt-1 text-xs tracking-normal text-brand">
+                          {formatPaise(product.salePricePaise ?? product.basePricePaise)}
+                        </strong>
+                      </span>
+                      <span>
+                        Stock{" "}
+                        <strong className="block pt-1 text-xs tracking-normal text-stone-900">
+                          {product.stockQuantity}
+                        </strong>
+                      </span>
+                      <span>
+                        Images{" "}
+                        <strong className="block pt-1 text-xs tracking-normal text-stone-900">
+                          {product.images.length}
+                        </strong>
+                      </span>
+                      <span>
+                        Photos{" "}
+                        <strong className="block pt-1 text-xs tracking-normal text-stone-900">
+                          {product.minPhotos}-{product.maxPhotos}
+                        </strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 md:justify-end">
+                    <span className="inline-flex h-9 items-center justify-center border border-stone-900 px-4 text-[10px] font-bold uppercase tracking-widest text-stone-900 transition group-open:bg-stone-900 group-open:text-white rounded-none">
+                      Edit
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-stone-400 transition group-open:rotate-180" />
+                  </div>
+                </summary>
+
+                <form action={updateProduct} className="border-t border-stone-200 bg-white rounded-none">
                   <input type="hidden" name="id" value={product.id} />
 
-                  {/* Product Thumbnail Block */}
-                  <div className="flex items-center gap-4 shrink-0 w-full lg:w-[260px]">
-                    <div className="relative h-16 w-12 border border-stone-200 overflow-hidden bg-white shrink-0">
-                      <Image src={coverImage} alt={product.name} fill className="object-cover" />
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="font-serif text-lg font-bold text-stone-900 truncate">{product.name}</h4>
-                      <p className="text-[10px] text-stone-400 font-mono truncate">ID: {product.id}</p>
-                    </div>
-                  </div>
-
-                  {/* Editable Inputs Grid */}
-                  <div className="grid gap-4 grid-cols-2 sm:grid-cols-4 flex-1 w-full">
-                    {/* Base Price input (in Rs) */}
-                    <label className="block text-[9px] font-bold uppercase tracking-wider text-stone-400">
-                      Base Price (₹)
-                      <input
-                        required
-                        type="number"
-                        step="0.01"
-                        name="basePrice"
-                        defaultValue={(product.basePricePaise / 100).toFixed(2)}
-                        className="mt-1.5 h-9 w-full border border-stone-200 bg-white px-3 text-xs font-mono font-semibold outline-none focus:border-brand rounded-none"
-                      />
-                    </label>
-
-                    {/* Sale Price input (in Rs) */}
-                    <label className="block text-[9px] font-bold uppercase tracking-wider text-stone-400">
-                      Sale Price (₹)
-                      <input
-                        type="number"
-                        step="0.01"
-                        name="salePrice"
-                        placeholder="None"
-                        defaultValue={product.salePricePaise ? (product.salePricePaise / 100).toFixed(2) : ""}
-                        className="mt-1.5 h-9 w-full border border-stone-200 bg-white px-3 text-xs font-mono font-semibold outline-none focus:border-brand rounded-none"
-                      />
-                    </label>
-
-                    {/* Stock level input */}
-                    <label className="block text-[9px] font-bold uppercase tracking-wider text-stone-400">
-                      Stock Count
-                      <input
-                        required
-                        type="number"
-                        name="stockQuantity"
-                        defaultValue={product.stockQuantity}
-                        className="mt-1.5 h-9 w-full border border-stone-200 bg-white px-3 text-xs font-mono font-semibold outline-none focus:border-brand rounded-none"
-                      />
-                    </label>
-
-                    {/* Active Toggle selector */}
-                    <label className="block text-[9px] font-bold uppercase tracking-wider text-stone-400">
-                      Catalogue Visibility
-                      <select
-                        name="isActive"
-                        defaultValue={product.isActive ? "true" : "false"}
-                        className="mt-1.5 h-9 w-full border border-stone-200 bg-white px-2 text-xs font-semibold outline-none focus:border-brand rounded-none cursor-pointer"
-                      >
-                        <option value="true">Active / Visible</option>
-                        <option value="false">Hidden / Inactive</option>
-                      </select>
-                    </label>
-                  </div>
-
-                  {/* Row Save Trigger Action */}
-                  <div className="w-full lg:w-auto flex items-center gap-4 lg:pt-3">
-                    <button
-                      type="submit"
-                      className="w-full lg:w-auto h-9 bg-stone-900 hover:bg-brand text-white text-[10px] uppercase font-bold tracking-widest px-5 rounded-none flex items-center justify-center gap-2 transition duration-200 border border-stone-800"
-                    >
-                      <Save className="h-3 w-3" />
-                      Save
-                    </button>
-                    
-                    <div className="flex items-center gap-1.5 whitespace-nowrap text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                  <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-stone-200 bg-white/95 p-4 backdrop-blur md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-stone-500">
                       {product.isActive ? (
-                        <CheckCircle className="h-4 w-4 text-emerald-600" />
+                        <CheckCircle className="h-4 w-4 text-emerald-700" />
                       ) : (
-                        <XCircle className="h-4 w-4 text-red-600" />
+                        <XCircle className="h-4 w-4 text-red-700" />
                       )}
+                      Editing {product.name}
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <Link
+                        href={`/products/${product.slug}`}
+                        className="inline-flex h-10 items-center justify-center gap-2 border border-stone-300 bg-white px-4 text-[10px] font-bold uppercase tracking-widest text-stone-700 transition hover:border-brand hover:text-brand rounded-none"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Storefront
+                      </Link>
+                      <button
+                        type="submit"
+                        formAction={archiveProduct}
+                        className="inline-flex h-10 items-center justify-center gap-2 border border-red-900/30 bg-white px-4 text-[10px] font-bold uppercase tracking-widest text-red-800 transition hover:border-red-950 hover:bg-red-950 hover:text-white rounded-none"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Archive
+                      </button>
+                      <button
+                        type="submit"
+                        className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-4 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand rounded-none"
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        Save
+                      </button>
                     </div>
                   </div>
 
-                </form>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                  <div className="grid gap-5 p-4 xl:grid-cols-[200px_1fr]">
+                    <aside className="hidden xl:block">
+                      <div className="sticky top-20 space-y-3">
+                        <div className="aspect-[4/5] overflow-hidden border border-stone-200 bg-[#FAFAF8] rounded-none">
+                        {product.images[0]?.url ? (
+                          <img
+                            src={product.images[0].url}
+                            alt={product.images[0].alt || product.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center">
+                            <ImageIcon className="h-8 w-8 text-stone-300" />
+                          </div>
+                        )}
+                        </div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
+                          Cover preview
+                        </p>
+                      </div>
+                    </aside>
 
+                    <div className="space-y-5">
+                      <section className="border border-stone-200 bg-[#FAFAF8] p-4 rounded-none">
+                        <div className="mb-4 flex items-center gap-3 border-b border-stone-200 pb-3">
+                          <span className="h-px w-7 bg-brand" />
+                          <h3 className="text-[10px] font-bold uppercase tracking-widest text-stone-500">
+                            Product Story
+                          </h3>
+                        </div>
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          Product name
+                          <input
+                            required
+                            name="name"
+                            defaultValue={product.name}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs outline-none transition focus:border-brand rounded-none"
+                          />
+                        </label>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          Slug
+                          <input
+                            required
+                            name="slug"
+                            defaultValue={product.slug}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs font-mono outline-none transition focus:border-brand rounded-none"
+                          />
+                        </label>
+                      </div>
+
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                        Short description
+                        <input
+                          required
+                          name="shortDescription"
+                          defaultValue={product.shortDescription}
+                          className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs outline-none transition focus:border-brand rounded-none"
+                        />
+                      </label>
+
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                        Full description
+                        <textarea
+                          required
+                          name="description"
+                          rows={3}
+                          defaultValue={product.description}
+                          className="mt-2 w-full border border-stone-200 bg-white px-4 py-3 text-xs leading-6 outline-none transition focus:border-brand rounded-none"
+                        />
+                      </label>
+                    </section>
+
+                      <section className="border border-stone-200 bg-[#FAFAF8] p-4 rounded-none">
+                        <div className="mb-4 flex items-center gap-3 border-b border-stone-200 pb-3">
+                          <span className="h-px w-7 bg-brand" />
+                          <h3 className="text-[10px] font-bold uppercase tracking-widest text-stone-500">
+                            Pricing And Fulfilment
+                          </h3>
+                        </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          Base price
+                          <input
+                            required
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            name="basePrice"
+                            defaultValue={(product.basePricePaise / 100).toFixed(2)}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs font-mono outline-none transition focus:border-brand rounded-none"
+                          />
+                        </label>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          Sale price
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            name="salePrice"
+                            defaultValue={product.salePricePaise !== null ? (product.salePricePaise / 100).toFixed(2) : ""}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs font-mono outline-none transition focus:border-brand rounded-none"
+                          />
+                        </label>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          COD fee
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            name="codFee"
+                            defaultValue={(product.codFeePaise / 100).toFixed(2)}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs font-mono outline-none transition focus:border-brand rounded-none"
+                          />
+                        </label>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          Stock
+                          <input
+                            required
+                            type="number"
+                            min="0"
+                            name="stockQuantity"
+                            defaultValue={product.stockQuantity}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs font-mono outline-none transition focus:border-brand rounded-none"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          Production days
+                          <input
+                            type="number"
+                            min="0"
+                            name="productionDays"
+                            defaultValue={product.productionDays}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs font-mono outline-none transition focus:border-brand rounded-none"
+                          />
+                        </label>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          Min photos
+                          <input
+                            type="number"
+                            min="0"
+                            name="minPhotos"
+                            defaultValue={product.minPhotos}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs font-mono outline-none transition focus:border-brand rounded-none"
+                          />
+                        </label>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          Max photos
+                          <input
+                            type="number"
+                            min="0"
+                            name="maxPhotos"
+                            defaultValue={product.maxPhotos}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs font-mono outline-none transition focus:border-brand rounded-none"
+                          />
+                        </label>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          Category
+                          <select
+                            name="categoryId"
+                            defaultValue={product.categoryId || ""}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-3 text-xs outline-none transition focus:border-brand rounded-none"
+                          >
+                            <option value="">No category</option>
+                            {categories.map((category) => (
+                              <option key={category.id} value={category.id}>
+                                {category.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          Visibility
+                          <select
+                            name="isActive"
+                            defaultValue={product.isActive ? "true" : "false"}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-3 text-xs outline-none transition focus:border-brand rounded-none"
+                          >
+                            <option value="true">Active</option>
+                            <option value="false">Hidden</option>
+                          </select>
+                        </label>
+                      </div>
+                    </section>
+
+                      <details className="border border-stone-200 bg-[#FAFAF8] rounded-none">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-4 text-[10px] font-bold uppercase tracking-widest text-stone-500 [&::-webkit-details-marker]:hidden">
+                          <span className="flex items-center gap-3">
+                            <span className="h-px w-7 bg-brand" />
+                            Search Metadata
+                          </span>
+                          <ChevronDown className="h-4 w-4 text-stone-400" />
+                        </summary>
+
+                      <div className="grid gap-4 border-t border-stone-200 p-4 md:grid-cols-2">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          SEO title
+                          <input
+                            name="seoTitle"
+                            defaultValue={product.seoTitle || ""}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs outline-none transition focus:border-brand rounded-none"
+                          />
+                        </label>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                          SEO description
+                          <input
+                            name="seoDescription"
+                            defaultValue={product.seoDescription || ""}
+                            className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs outline-none transition focus:border-brand rounded-none"
+                          />
+                        </label>
+                      </div>
+                      </details>
+
+                      <details className="border border-stone-200 bg-[#FAFAF8] rounded-none">
+                        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-4 text-[10px] font-bold uppercase tracking-widest text-stone-500 [&::-webkit-details-marker]:hidden">
+                          <span className="flex items-center gap-3">
+                            <span className="h-px w-7 bg-brand" />
+                            Image Sequence ({product.images.length})
+                          </span>
+                          <ChevronDown className="h-4 w-4 text-stone-400" />
+                        </summary>
+                        <div className="border-t border-stone-200 p-4">
+                          <ProductImageUploader initialImages={initialImages} />
+                        </div>
+                      </details>
+                    </div>
+                  </div>
+                </form>
+              </details>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -14,58 +14,102 @@ import {
 export const revalidate = 0; // Dynamic server component, always serves fresh database values
 
 export default async function AdminDashboardPage(): Promise<React.JSX.Element> {
-  // Execute concurrent, highly optimized database queries in parallel (Rule 4)
-  const [
-    successfulOrders,
-    totalOrdersCount,
-    pendingCount,
-    designingCount,
-    printingCount,
-    shippedCount,
-    recentOrders,
-    topProductsRaw,
-    abandonedCartsCount
-  ] = await Promise.all([
-    // 1. Fetch total sales earnings (using CAPTURED payment status)
-    db.order.findMany({
-      where: { paymentStatus: PaymentStatus.CAPTURED },
-      select: { totalPaise: true }
-    }),
-    // 2. Fetch total orders count
-    db.order.count(),
-    // 3. Fetch active pipeline queue counts
-    db.order.count({ where: { status: "PENDING" } }),
-    db.order.count({ where: { status: "DESIGNING" } }),
-    db.order.count({ where: { status: "PRINTING" } }),
-    db.order.count({ where: { status: "SHIPPED" } }),
-    // 4. Fetch 5 most recent orders
-    db.order.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 5
-    }),
-    // 5. Aggregate top-selling products using native GroupBy (Rule 7)
-    db.orderItem.groupBy({
-      by: ["productId", "productName"],
-      _sum: {
-        quantity: true,
-        totalPricePaise: true
-      },
-      orderBy: {
-        _sum: {
-          quantity: "desc"
-        }
-      },
-      take: 3
-    }),
-    // 6. Count abandoned carts from the Cart table (Rule 4 & 7.8)
-    db.cart.count({ where: { status: "ABANDONED" } }).catch(() => 0)
-  ]);
+  const now = new Date();
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
 
-  // Compute total sales metrics using integer paise math with explicit typing (Rule 2)
-  const totalRevenuePaise = successfulOrders.reduce(
-    (sum: number, o: { totalPaise: number }) => sum + o.totalPaise,
-    0
-  );
+  const startOfWeek = new Date(startOfToday);
+  startOfWeek.setDate(startOfToday.getDate() - ((startOfToday.getDay() + 6) % 7));
+
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+  try {
+  const capturedOrdersThisYear = await db.order.findMany({
+    where: {
+      paymentStatus: PaymentStatus.CAPTURED,
+      createdAt: { gte: startOfYear }
+    },
+    select: {
+      totalPaise: true,
+      createdAt: true
+    }
+  });
+
+  const totalOrdersCount = await db.order.count();
+
+  const statusCountsRaw = await db.order.groupBy({
+    by: ["status"],
+    where: {
+      status: { in: ["PENDING", "DESIGNING", "PRINTING", "SHIPPED"] }
+    },
+    _count: { _all: true }
+  });
+
+  const recentOrders = await db.order.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 5
+  });
+
+  const topProductsRaw = await db.orderItem.groupBy({
+    by: ["productId", "productName"],
+    _sum: {
+      quantity: true,
+      totalPricePaise: true
+    },
+    orderBy: {
+      _sum: {
+        quantity: "desc"
+      }
+    },
+    take: 3
+  });
+
+  const abandonedCartsCount = await db.cart.count({ where: { status: "ABANDONED" } }).catch(() => 0);
+
+  const revenueSince = (startDate: Date): number =>
+    capturedOrdersThisYear.reduce((sum, order) => {
+      return order.createdAt >= startDate ? sum + order.totalPaise : sum;
+    }, 0);
+
+  const statusCount = (status: string): number =>
+    statusCountsRaw.find((item) => item.status === status)?._count._all ?? 0;
+
+  const todayRevenuePaise = revenueSince(startOfToday);
+  const weeklyRevenuePaise = revenueSince(startOfWeek);
+  const monthlyRevenuePaise = revenueSince(startOfMonth);
+  const yearlyRevenuePaise = revenueSince(startOfYear);
+  const pendingCount = statusCount("PENDING");
+  const designingCount = statusCount("DESIGNING");
+  const printingCount = statusCount("PRINTING");
+  const shippedCount = statusCount("SHIPPED");
+
+  const revenueCards = [
+    {
+      label: "Today Revenue",
+      value: todayRevenuePaise,
+      note: "Captured payments since midnight",
+      icon: TrendingUp
+    },
+    {
+      label: "Weekly Revenue",
+      value: weeklyRevenuePaise,
+      note: "Captured payments this week",
+      icon: Clock
+    },
+    {
+      label: "Monthly Revenue",
+      value: monthlyRevenuePaise,
+      note: "Captured payments this month",
+      icon: ShoppingBag
+    },
+    {
+      label: "Yearly Revenue",
+      value: yearlyRevenuePaise,
+      note: "Captured payments this year",
+      icon: AlertCircle
+    }
+  ];
 
   return (
     <div className="space-y-10">
@@ -78,67 +122,43 @@ export default async function AdminDashboardPage(): Promise<React.JSX.Element> {
         </h1>
       </div>
 
-      {/* 4-Column Stat Cards Row */}
+      {/* 4-Column Revenue Cards Row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        
-        {/* Total Sales Card */}
-        <div className="border border-stone-200 bg-white p-6 rounded-none space-y-3">
-          <div className="flex justify-between items-center text-stone-400">
-            <span className="text-[10px] uppercase font-bold tracking-widest">Total Sales</span>
-            <TrendingUp className="h-4 w-4 text-brand" />
-          </div>
-          <div className="space-y-1">
-            <span className="block text-3xl font-black text-stone-900 font-mono">
-              {formatPaise(totalRevenuePaise)}
-            </span>
-            <span className="block text-[10px] text-stone-400 font-light">Verified bank settlements only</span>
-          </div>
-        </div>
+        {revenueCards.map((card) => {
+          const Icon = card.icon;
 
-        {/* Total Orders Card */}
-        <div className="border border-stone-200 bg-white p-6 rounded-none space-y-3">
-          <div className="flex justify-between items-center text-stone-400">
-            <span className="text-[10px] uppercase font-bold tracking-widest">Orders Booked</span>
-            <ShoppingBag className="h-4 w-4 text-stone-700" />
-          </div>
-          <div className="space-y-1">
-            <span className="block text-3xl font-black text-stone-900 font-mono">
-              {totalOrdersCount}
-            </span>
-            <span className="block text-[10px] text-stone-400 font-light">Total historical order volume</span>
-          </div>
-        </div>
+          return (
+            <div key={card.label} className="border border-stone-200 bg-white p-6 rounded-none space-y-3">
+              <div className="flex justify-between items-center text-stone-400">
+                <span className="text-[10px] uppercase font-bold tracking-widest">{card.label}</span>
+                <Icon className="h-4 w-4 text-brand" />
+              </div>
+              <div className="space-y-1">
+                <span className="block text-3xl font-black text-stone-900 font-mono">
+                  {formatPaise(card.value)}
+                </span>
+                <span className="block text-[10px] text-stone-400 font-light">{card.note}</span>
+              </div>
+            </div>
+          );
+        })}
 
-        {/* Active Pipeline Card */}
-        <div className="border border-stone-200 bg-white p-6 rounded-none space-y-3">
-          <div className="flex justify-between items-center text-stone-400">
-            <span className="text-[10px] uppercase font-bold tracking-widest">Active Pipeline</span>
-            <Clock className="h-4 w-4 text-amber-600" />
-          </div>
-          <div className="space-y-1">
-            <span className="block text-3xl font-black text-stone-900 font-mono">
-              {pendingCount + designingCount + printingCount}
-            </span>
-            <span className="block text-[10px] text-stone-400 font-light">
-              {designingCount} designing / {printingCount} in press
-            </span>
-          </div>
-        </div>
+      </div>
 
-        {/* Abandoned Carts Card */}
-        <div className="border border-stone-200 bg-white p-6 rounded-none space-y-3">
-          <div className="flex justify-between items-center text-stone-400">
-            <span className="text-[10px] uppercase font-bold tracking-widest">Abandoned Carts</span>
-            <AlertCircle className="h-4 w-4 text-red-600" />
-          </div>
-          <div className="space-y-1">
-            <span className="block text-3xl font-black text-stone-900 font-mono">
-              {abandonedCartsCount}
-            </span>
-            <span className="block text-[10px] text-stone-400 font-light">Awaiting WhatsApp triggers</span>
-          </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="border border-stone-200 bg-white p-5">
+          <p className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Orders Booked</p>
+          <p className="mt-2 font-mono text-2xl font-black text-stone-900">{totalOrdersCount}</p>
         </div>
-
+        <div className="border border-stone-200 bg-white p-5">
+          <p className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Active Pipeline</p>
+          <p className="mt-2 font-mono text-2xl font-black text-stone-900">{pendingCount + designingCount + printingCount}</p>
+          <p className="mt-1 text-[10px] text-stone-400">{designingCount} designing / {printingCount} in press / {shippedCount} shipped</p>
+        </div>
+        <div className="border border-stone-200 bg-white p-5">
+          <p className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Abandoned Carts</p>
+          <p className="mt-2 font-mono text-2xl font-black text-stone-900">{abandonedCartsCount}</p>
+        </div>
       </div>
 
       {/* Main Grid: Recent Orders + Top Products */}
@@ -248,4 +268,34 @@ export default async function AdminDashboardPage(): Promise<React.JSX.Element> {
 
     </div>
   );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown database error";
+
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="font-serif text-4xl font-black text-stone-900 tracking-tight leading-none">
+            Overview <br />
+            <span className="font-normal italic text-stone-600 text-2xl">Studio performance & pipeline metrics</span>
+          </h1>
+        </div>
+
+        <div className="border border-stone-200 bg-white p-8">
+          <div className="mb-4 flex items-center gap-3 text-brand">
+            <AlertCircle className="h-5 w-5" />
+            <span className="text-xs font-bold uppercase tracking-widest">Database connection limit reached</span>
+          </div>
+          <h2 className="font-serif text-3xl font-black text-stone-900">
+            Metrics <span className="font-normal italic text-stone-700">temporarily unavailable</span>
+          </h2>
+          <p className="mt-4 max-w-[65ch] text-sm font-light leading-7 text-stone-600">
+            Supabase refused a dashboard query because too many sessions are already open. Restart the dev server to release old hot-reload connections, then refresh this page.
+          </p>
+          <p className="mt-5 border-t border-stone-100 pt-4 font-mono text-[11px] leading-5 text-stone-400">
+            {message}
+          </p>
+        </div>
+      </div>
+    );
+  }
 }

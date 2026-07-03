@@ -4,13 +4,15 @@ import React, { useState, useEffect } from "react";
 import { Loader } from "./Loader";
 import { LandingPage } from "./LandingPage";
 import { Features, type StorefrontProduct } from "./Features";
+import type { StorefrontBanner } from "@/lib/products";
 
 interface StorefrontHomeClientProps {
   products: StorefrontProduct[];
+  banners: StorefrontBanner[];
 }
 
 // Ensure the function name matches the file name
-export function StorefrontHomeClient({ products }: StorefrontHomeClientProps): React.JSX.Element {
+export function StorefrontHomeClient({ products, banners }: StorefrontHomeClientProps): React.JSX.Element {
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Lock scrolling parameter during loading phases
@@ -38,7 +40,7 @@ export function StorefrontHomeClient({ products }: StorefrontHomeClientProps): R
             : "opacity-0 translate-y-12 pointer-events-none"
         }`}
       >
-        <LandingPage isActive={isLoaded} />
+        <LandingPage isActive={isLoaded} banners={banners} />
         <Features products={products} />
       </div>
     </div>

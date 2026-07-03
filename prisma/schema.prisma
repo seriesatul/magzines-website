@@ -64,6 +64,7 @@ model User {
   image         String?
   phone         String?   @unique
   role          UserRole  @default(CUSTOMER)
+  lastLoginAt   DateTime? // Tracks recent session logins (Feature 2)
   deletedAt     DateTime?
   accounts      Account[]
   sessions      Session[]
@@ -126,7 +127,7 @@ model Product {
   id               String            @id @default(cuid())
   slug             String            @unique
   name             String
-  shortDescription String
+  shortDescription String            // 👈 Corrected to capitalized String
   description      String            @db.Text
   basePricePaise   Int
   salePricePaise   Int?
@@ -136,9 +137,11 @@ model Product {
   maxPhotos        Int               @default(35)
   stockQuantity    Int
   isActive         Boolean           @default(true)
+  categoryId       String?           // Links products with Categories (Feature 3 & 4)
   seoTitle         String?
   seoDescription   String?
   deletedAt        DateTime?
+  category         Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   images           ProductImage[]
   orderItems       OrderItem[]
   reviews          Review[]
@@ -148,6 +151,86 @@ model Product {
 
   @@index([isActive, deletedAt])
   @@index([slug])
+}
+
+model Category {
+  id             String    @id @default(cuid())
+  name           String    @unique // e.g., "The Editorial Portrait"
+  slug           String    @unique
+  imageUrl       String    // Template cover image
+  minPhotos      Int       @default(10)
+  maxPhotos      Int       @default(35)
+  photosPerPage  Int       @default(4)
+  textStyle      String    @default("Editorial captions")
+  layoutPreference String  @default("Asymmetric magazine grid")
+  allowCustomerText Boolean @default(true)
+  description    String?   @db.Text
+  products       Product[] // Relation mapping to classified products
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([slug])
+}
+
+model Container {
+  id             String    @id @default(cuid())
+  name           String    // e.g., "Feature Collection Grid"
+  type           String    @default("GRID") // "GRID" | "SLIDER" | "LIST"
+  isActive       Boolean   @default(true)
+  sortOrder      Int       @default(0)
+  contentIds     String[]  // Array of linked Product or Category ID strings
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model Banner {
+  id             String    @id @default(cuid())
+  section        String    @default("hero")
+  title          String?
+  imageUrl       String    // Photo or Video CDN media link
+  mediaType      String    @default("IMAGE")
+  altText        String?
+  redirectUrl    String?   // Target product click-through URL
+  sortOrder      Int       @default(0)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([isActive, sortOrder])
+  @@index([section, isActive, sortOrder])
+}
+
+model Document {
+  id             String    @id @default(cuid())
+  slug           String    @unique // e.g., "privacy-policy", "terms-and-conditions"
+  title          String    // Page heading
+  body           String    @db.Text // Rich-text / Markdown copy content
+  placement      String    @default("footer")
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([slug])
+  @@index([placement, isActive])
+}
+
+model SiteSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  label       String
+  value       String   @db.Text
+  valueType   String   @default("TEXT")
+  group       String   @default("general")
+  isSecret    Boolean  @default(false)
+  description String?  @db.Text
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([group])
+  @@index([isSecret])
 }
 
 model ProductImage {

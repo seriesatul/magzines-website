@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
@@ -14,9 +14,24 @@ export default function SignInPage(): React.JSX.Element {
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [adminCallbackUrl, setAdminCallbackUrl] = useState("/admin");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedMode = params.get("mode");
+    const callbackUrl = params.get("callbackUrl");
+
+    if (requestedMode === "admin" || callbackUrl?.startsWith("/admin")) {
+      setLoginMode("admin");
+    }
+
+    if (callbackUrl?.startsWith("/admin")) {
+      setAdminCallbackUrl(callbackUrl);
+    }
+  }, []);
 
   // 1. Passwordless Customer Magic-Link Handler
   const handleCustomerSignIn = async (cleanEmail: string) => {
@@ -60,8 +75,7 @@ export default function SignInPage(): React.JSX.Element {
         throw new Error("Invalid administrator email or password credentials.");
       }
 
-      // Successful login - route directly to the Admin Dashboard (Rule 7)
-      router.push("/admin");
+      router.push(adminCallbackUrl as any);
     } catch (err) {
       setError(
         err instanceof Error

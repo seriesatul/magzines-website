@@ -55,7 +55,7 @@ type RootLayoutProps = Readonly<{
 
 export default function RootLayout({ children }: RootLayoutProps): React.JSX.Element {
   return (
-    <html lang="en-IN" suppressHydrationWarning className="scroll-smooth">
+    <html lang="en-IN" suppressHydrationWarning className="scroll-smooth" data-scroll-behavior="smooth">
       <body
         className={`${playfair.variable} ${dmSans.variable} font-sans antialiased bg-stone-50 text-stone-900 selection:bg-brand/10 selection:text-brand`}
       >

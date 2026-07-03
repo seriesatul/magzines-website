@@ -1,25 +1,27 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { gsap } from "gsap";
+import { HeroSlider } from "@/components/storefront/HeroSlider";
+import type { StorefrontBanner } from "@/lib/products";
 
 interface LandingPageProps {
   isActive: boolean; // Receives the load-completion status from the parent orchestrator
+  banners: StorefrontBanner[];
 }
 
-export function LandingPage({ isActive }: LandingPageProps): React.JSX.Element {
+export function LandingPage({ isActive, banners }: LandingPageProps): React.JSX.Element {
   const headerRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
-  const collageRef = useRef<HTMLDivElement>(null);
+  const sliderRef = useRef<HTMLDivElement>(null);
 
   // Synchronize layout entrance with loader exit
   useEffect(() => {
     if (!isActive) {
       // Keep layouts fully invisible before load completion
-      gsap.set([headerRef.current, sidebarRef.current, mainContentRef.current, collageRef.current], {
+      gsap.set([headerRef.current, sliderRef.current, sidebarRef.current, mainContentRef.current], {
         opacity: 0
       });
       return;
@@ -38,14 +40,14 @@ export function LandingPage({ isActive }: LandingPageProps): React.JSX.Element {
         { x: 0, opacity: 1, duration: 1.0, ease: "power4.out" },
         "-=0.7"
       )
+      .fromTo(sliderRef.current,
+        { y: 36, opacity: 0 },
+        { y: 0, opacity: 1, duration: 1.1, ease: "power4.out" },
+        "-=0.8"
+      )
       .fromTo(mainContentRef.current,
         { y: 40, opacity: 0 },
         { y: 0, opacity: 1, duration: 1.2, ease: "power4.out" },
-        "-=0.8"
-      )
-      .fromTo(collageRef.current,
-        { y: 50, opacity: 0, scale: 1.02 },
-        { y: 0, opacity: 1, scale: 1, duration: 1.3, ease: "power4.out" },
         "-=0.9"
       );
     });
@@ -75,6 +77,10 @@ export function LandingPage({ isActive }: LandingPageProps): React.JSX.Element {
             Subscribe
           </Link>
         </div>
+      </div>
+
+      <div ref={sliderRef} className="opacity-0">
+        <HeroSlider banners={banners} />
       </div>
 
       {/* Main Editorial Layout Grid */}
@@ -167,49 +173,6 @@ export function LandingPage({ isActive }: LandingPageProps): React.JSX.Element {
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Asymmetric Bottom Collage Banner Section */}
-      <div
-        ref={collageRef}
-        className="grid grid-cols-1 md:grid-cols-[2.5fr_1.1fr_1.1fr_1.1fr] gap-2 border-t border-stone-200 pt-6 h-[10vh] md:h-[280px] overflow-hidden opacity-0"
-      >
-        <div className="relative h-full w-full group overflow-hidden">
-          <Image
-            src="https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=1200"
-            alt="Large hero visual story portrait layout"
-            fill
-            className="object-cover group-hover:scale-[1.04] transition duration-500 ease-editorial"
-          />
-          <div className="absolute top-3 left-3 text-[10px] text-white tracking-widest uppercase bg-stone-900/40 px-1.5 py-0.5 font-semibold">NY.</div>
-        </div>
-        <div className="relative h-full w-full group overflow-hidden">
-          <Image
-            src="https://images.unsplash.com/photo-1544816155-12df9643f363?q=80&w=600"
-            alt="Editorial custom magazine spreads"
-            fill
-            className="object-cover group-hover:scale-[1.04] transition duration-500 ease-editorial"
-          />
-          <div className="absolute top-3 left-3 text-[10px] text-white tracking-widest uppercase bg-stone-900/40 px-1.5 py-0.5 font-semibold">KR.</div>
-        </div>
-        <div className="relative h-full w-full group overflow-hidden">
-          <Image
-            src="https://images.unsplash.com/photo-1512436991641-6745cdb1723f?q=80&w=600"
-            alt="Premium custom photo layout booklet"
-            fill
-            className="object-cover group-hover:scale-[1.04] transition duration-500 ease-editorial"
-          />
-          <div className="absolute top-3 left-3 text-[10px] text-white tracking-widest uppercase bg-stone-900/40 px-1.5 py-0.5 font-semibold">SA.</div>
-        </div>
-        <div className="relative h-full w-full group overflow-hidden">
-          <Image
-            src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=600"
-            alt="Textured paper custom magazine layout details"
-            fill
-            className="object-cover group-hover:scale-[1.04] transition duration-500 ease-editorial"
-          />
-          <div className="absolute top-3 left-3 text-[10px] text-white tracking-widest uppercase bg-stone-900/40 px-1.5 py-0.5 font-semibold">NT.</div>
         </div>
       </div>
     </header>

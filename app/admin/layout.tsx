@@ -20,14 +20,14 @@ export default async function AdminLayout({ children }: AdminLayoutProps): Promi
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAF8] text-[#0A0A0A] flex flex-col lg:flex-row">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#FAFAF8] text-[#0A0A0A] lg:flex-row">
       {/* 2. Interactive Dark-Themed Sidebar Navigation */}
       <AdminSidebar session={session} />
 
       {/* 3. Main Dashboard Content Viewport */}
-      <div className="flex-1 min-w-0 p-6 md:p-10 lg:p-12">
+      <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 pb-6 pt-24 md:px-10 md:pb-10 md:pt-28 lg:p-12">
         {children}
-      </div>
+      </main>
     </div>
   );
 }

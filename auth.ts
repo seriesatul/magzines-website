@@ -63,6 +63,16 @@ export const authConfig = {
     signIn: "/sign-in"
   },
   callbacks: {
+    async signIn({ user }) {
+      if (user?.id) {
+        await db.user.update({
+          where: { id: user.id },
+          data: { lastLoginAt: new Date() }
+        });
+      }
+
+      return true;
+    },
     // Map database properties into the signed JWT token upon sign-in
     jwt({ token, user }) {
       if (user) {

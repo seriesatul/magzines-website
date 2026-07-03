@@ -63,15 +63,15 @@ export async function POST(request: Request): Promise<NextResponse> {
       db.order.update({
         where: { id: order.id },
         data: {
-          paymentStatus: "SUCCESS" as PaymentStatus // Successfully resolved and cast to schema enum
+          paymentStatus: PaymentStatus.CAPTURED
         }
       }),
       db.payment.updateMany({
         where: { orderId: order.id },
         data: {
-          status: "CAPTURED", // Mark gateway ledger status
-          gatewayPaymentId: payload.razorpayPaymentId,
-          gatewaySignature: payload.razorpaySignature
+          status: PaymentStatus.CAPTURED,
+          providerPaymentId: payload.razorpayPaymentId,
+          providerSignature: payload.razorpaySignature
         }
       })
     ]);

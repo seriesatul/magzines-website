@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { siteConfig } from "@/config/site";
-import { getStorefrontProducts } from "@/lib/products";
+import { getStorefrontHeroBanners, getStorefrontProducts } from "@/lib/products";
 import { StorefrontHomeClient } from "@/components/storefront/StorefrontHomeClient";
 
 export const revalidate = 300;
@@ -48,9 +48,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function StorefrontHomePage(): Promise<React.JSX.Element> {
   // Pre-fetch products on the server side to maintain fast database hydration
-  const products = await getStorefrontProducts();
+  const [products, banners] = await Promise.all([
+    getStorefrontProducts(),
+    getStorefrontHeroBanners()
+  ]);
 
   return (
-    <StorefrontHomeClient products={products} />
+    <StorefrontHomeClient products={products} banners={banners} />
   );
 }

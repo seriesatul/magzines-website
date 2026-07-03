@@ -6,6 +6,41 @@ import { logger } from "@/server/logger/logger";
 const FALLBACK_PRODUCT_IMAGE =
   "https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=1200&q=80";
 
+const PLACEHOLDER_MEDIA_MARKERS = [
+  "replace-with",
+  "your_",
+  "your-",
+  "yourbucketdomain",
+  "your-bucket",
+  "your_bucket",
+  "yourdomain",
+  "example",
+  "cloudflare_account_id_hex_string"
+];
+
+function isUsableMediaUrl(value: string | null | undefined): value is string {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  if (PLACEHOLDER_MEDIA_MARKERS.some((marker) => normalized.includes(marker))) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return value.startsWith("/");
+  }
+}
+
+function getSafeMediaUrl(value: string | null | undefined, fallback: string): string {
+  return isUsableMediaUrl(value) ? value : fallback;
+}
+
 export type StorefrontProduct = {
   id: string;
   slug: string;
@@ -36,6 +71,32 @@ export type StorefrontAnnouncement = {
   title: string;
   body: string;
 };
+
+export type StorefrontBanner = {
+  id: string;
+  section: string;
+  title: string | null;
+  imageUrl: string;
+  mediaType: string;
+  altText: string | null;
+  redirectUrl: string | null;
+};
+
+function normalizeStorefrontBanner(banner: StorefrontBanner): StorefrontBanner | null {
+  if (!isUsableMediaUrl(banner.imageUrl)) {
+    return null;
+  }
+
+  return {
+    ...banner,
+    imageUrl: banner.imageUrl.trim(),
+    mediaType: banner.mediaType === "VIDEO" ? "VIDEO" : "IMAGE"
+  };
+}
+
+function isStorefrontBanner(value: StorefrontBanner | null): value is StorefrontBanner {
+  return value !== null;
+}
 
 export const getStorefrontProducts = unstable_cache(
   async (): Promise<Array<StorefrontProduct>> => {
@@ -70,7 +131,7 @@ export const getStorefrontProducts = unstable_cache(
           productionDays: product.productionDays,
           minPhotos: product.minPhotos,
           maxPhotos: product.maxPhotos,
-          imageUrl: image?.url ?? FALLBACK_PRODUCT_IMAGE,
+          imageUrl: getSafeMediaUrl(image?.url, FALLBACK_PRODUCT_IMAGE),
           imageAlt: image?.alt ?? `${product.name} cover image`
         };
       });
@@ -126,10 +187,10 @@ export const getStorefrontProductBySlug = unstable_cache(
         productionDays: product.productionDays,
         minPhotos: product.minPhotos,
         maxPhotos: product.maxPhotos,
-        imageUrl: image?.url ?? FALLBACK_PRODUCT_IMAGE,
+        imageUrl: getSafeMediaUrl(image?.url, FALLBACK_PRODUCT_IMAGE),
         imageAlt: image?.alt ?? `${product.name} cover image`,
         images: product.images.map((imageItem) => ({
-          url: imageItem.url,
+          url: getSafeMediaUrl(imageItem.url, FALLBACK_PRODUCT_IMAGE),
           alt: imageItem.alt,
           sortOrder: imageItem.sortOrder
         }))
@@ -183,5 +244,81 @@ export const getStorefrontAnnouncement = unstable_cache(
   {
     revalidate: 300,
     tags: ["announcements"]
+  }
+);
+
+export const getStorefrontBanners = unstable_cache(
+  async (): Promise<Array<StorefrontBanner>> => {
+    try {
+      const banners = await db.banner.findMany({
+        where: {
+          isActive: true,
+          section: {
+            in: ["hero", "banner", "collection", "full-bleed"]
+          }
+        },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+        take: 8,
+        select: {
+          id: true,
+          section: true,
+          title: true,
+          imageUrl: true,
+          mediaType: true,
+          altText: true,
+          redirectUrl: true
+        }
+      });
+
+      return banners.map(normalizeStorefrontBanner).filter(isStorefrontBanner);
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        "Database error fetching storefront banners"
+      );
+      return [];
+    }
+  },
+  ["storefront-banners"],
+  {
+    revalidate: 300,
+    tags: ["banners"]
+  }
+);
+
+export const getStorefrontHeroBanners = unstable_cache(
+  async (): Promise<Array<StorefrontBanner>> => {
+    try {
+      const banners = await db.banner.findMany({
+        where: {
+          isActive: true,
+          section: "hero"
+        },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+        take: 12,
+        select: {
+          id: true,
+          section: true,
+          title: true,
+          imageUrl: true,
+          mediaType: true,
+          altText: true,
+          redirectUrl: true
+        }
+      });
+
+      return banners.map(normalizeStorefrontBanner).filter(isStorefrontBanner);
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        "Database error fetching storefront hero banners"
+      );
+      return [];
+    }
+  },
+  ["storefront-hero-banners"],
+  {
+    revalidate: 300,
+    tags: ["banners"]
   }
 );
