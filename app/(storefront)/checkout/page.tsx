@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { auth } from "@/auth";
 import { CheckoutClient } from "@/components/checkout/CheckoutClient";
+import { getCheckoutSettings } from "@/lib/checkout-settings";
 
 export const metadata: Metadata = {
   title: "Checkout | Hearts & Beans",
@@ -8,10 +9,10 @@ export const metadata: Metadata = {
 };
 
 export default async function CheckoutPage(): Promise<React.JSX.Element> {
-  // Fetch active NextAuth v5 session to support pre-filled customer details
-  const session = await auth();
+  const [session, checkoutSettings] = await Promise.all([
+    auth(),
+    getCheckoutSettings()
+  ]);
 
-  return (
-    <CheckoutClient session={session} />
-  );
+  return <CheckoutClient session={session} checkoutSettings={checkoutSettings} />;
 }

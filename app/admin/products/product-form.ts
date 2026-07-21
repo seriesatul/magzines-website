@@ -91,9 +91,14 @@ export function parseProductForm(formData: FormData): ProductFormInput {
   const shortDescription = getText(formData, "shortDescription");
   const description = getText(formData, "description");
   const basePricePaise = parseRupeesToPaise(formData, "basePrice", true);
+  const salePricePaise = parseRupeesToPaise(formData, "salePrice", false);
 
   if (!name || !slug || !shortDescription || !description || basePricePaise === null) {
-    throw new Error("Product name, slug, descriptions, and base price are required.");
+    throw new Error("Product name, slug, descriptions, and selling price are required.");
+  }
+
+  if (salePricePaise !== null && salePricePaise > basePricePaise) {
+    throw new Error("Customer price cannot be higher than selling price.");
   }
 
   const minPhotos = parseInteger(formData, "minPhotos", 10);
@@ -111,7 +116,7 @@ export function parseProductForm(formData: FormData): ProductFormInput {
     shortDescription,
     description,
     basePricePaise,
-    salePricePaise: parseRupeesToPaise(formData, "salePrice", false),
+    salePricePaise,
     codFeePaise: parseRupeesToPaise(formData, "codFee", false) ?? 0,
     productionDays,
     minPhotos,

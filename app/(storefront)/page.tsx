@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { siteConfig } from "@/config/site";
-import { getStorefrontHeroBanners, getStorefrontProducts } from "@/lib/products";
+import { getStorefrontCategories, getStorefrontProducts } from "@/lib/products";
 import { StorefrontHomeClient } from "@/components/storefront/StorefrontHomeClient";
 
 export const revalidate = 300;
 
-const pageTitle = "Hearts & Beans — Custom Magazine Printing";
+const pageTitle = "Hearts & Beans - Products";
 const pageDescription =
   "Order custom printed magazines with your photos. Fast delivery across India.";
 const fallbackOgImage =
@@ -47,13 +47,10 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function StorefrontHomePage(): Promise<React.JSX.Element> {
-  // Pre-fetch products on the server side to maintain fast database hydration
-  const [products, banners] = await Promise.all([
-    getStorefrontProducts(),
-    getStorefrontHeroBanners()
+  const [categories, products] = await Promise.all([
+    getStorefrontCategories(),
+    getStorefrontProducts()
   ]);
 
-  return (
-    <StorefrontHomeClient products={products} banners={banners} />
-  );
+  return <StorefrontHomeClient categories={categories} products={products} />;
 }

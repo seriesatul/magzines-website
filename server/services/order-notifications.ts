@@ -4,7 +4,7 @@ import { sendWhatsAppTemplate } from "@/server/services/whatsapp";
 import { type ServiceResult, success, failure } from "@/server/services/result";
 import { env } from "@/config/env";
 
-export type OrderStatusType = "DESIGNING" | "PRINTING" | "SHIPPED" | "DELIVERED";
+export type OrderStatusType = "DESIGNING" | "SHIPPED";
 
 /**
  * Dispatches an automated, pre-approved Meta WhatsApp status update notification to the customer.
@@ -35,21 +35,11 @@ export async function dispatchOrderStatusNotification(
         parameters = [order.customerName, order.orderNumber]; // {{1}} = Name, {{2}} = OrderNumber
         break;
 
-      case "PRINTING":
-        templateName = "order_status_printing";
-        parameters = [order.customerName, order.orderNumber]; // {{1}} = Name, {{2}} = OrderNumber
-        break;
-
       case "SHIPPED":
         templateName = "order_status_shipped";
         // Create direct, secure, anonymous tracking link for easy click-throughs
         const trackingLink = `${env.NEXT_PUBLIC_APP_URL}/orders/${order.orderNumber}?phone=${order.customerPhone}`;
         parameters = [order.customerName, order.orderNumber, trackingLink]; // {{1}} = Name, {{2}} = OrderNumber, {{3}} = Tracking Link
-        break;
-
-      case "DELIVERED":
-        templateName = "order_status_delivered";
-        parameters = [order.customerName, order.orderNumber]; // {{1}} = Name, {{2}} = OrderNumber
         break;
 
       default:

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
-import { env } from "@/config/env";
 import { getPresignedUploadUrl } from "@/server/storage/r2";
 import { logger } from "@/server/logger/logger";
+import { getStringSetting } from "@/server/services/settings";
 
 // Input schema for direct upload pre-signing requests
 const uploadRequestSchema = z.object({
@@ -47,7 +47,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     // 4. Resolve direct public CDN access path
-    const publicUrl = `${env.CLOUDFLARE_R2_PUBLIC_BASE_URL}/${uniqueKey}`;
+    const publicBaseUrl = await getStringSetting("cloudflareR2PublicBaseUrl");
+    const publicUrl = `${publicBaseUrl.replace(/\/+$/, "")}/${uniqueKey}`;
 
     logger.info({ key: uniqueKey }, "Presigned R2 upload authorization successfully compiled");
 

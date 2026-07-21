@@ -3,6 +3,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { UserRole } from "@prisma/client";
 import Resend from "next-auth/providers/resend";
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
 import { env } from "@/config/env";
 import { db } from "@/server/db/client";
 
@@ -15,8 +16,14 @@ export const authConfig = {
       from: env.RESEND_FROM_EMAIL
     }),
 
+    Google({
+      clientId: env.AUTH_GOOGLE_ID,
+      clientSecret: env.AUTH_GOOGLE_SECRET
+    }),
+
     // 2. Credentials Provider: Admin password login (Rule 6)
     Credentials({
+      id: "credentials",
       name: "Admin Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
@@ -51,6 +58,74 @@ export const authConfig = {
 
         // Return null if credentials mismatch
         return null;
+      }
+    }),
+
+    Credentials({
+      id: "otp",
+      name: "Email OTP",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        otp: { label: "OTP", type: "text" }
+      },
+      async authorize(credentials) {
+        const email = (credentials?.email as string | undefined)?.toLowerCase().trim();
+        const otp = (credentials?.otp as string | undefined)?.trim();
+
+        if (!email || !otp || !/^\d{6}$/.test(otp)) {
+          return null;
+        }
+
+        const tokenRecord = await db.verificationToken.findFirst({
+          where: {
+            identifier: email,
+            token: otp,
+            expires: { gte: new Date() }
+          }
+        });
+
+        if (!tokenRecord) {
+          return null;
+        }
+
+        await db.verificationToken.deleteMany({
+          where: { identifier: email, token: otp }
+        });
+
+        const existingUser = await db.user.findUnique({
+          where: { email }
+        });
+
+        if (existingUser) {
+          const updates: {
+            emailVerified?: Date;
+            deletedAt?: null;
+          } = {};
+
+          if (!existingUser.emailVerified) {
+            updates.emailVerified = new Date();
+          }
+
+          if (existingUser.deletedAt) {
+            updates.deletedAt = null;
+          }
+
+          return Object.keys(updates).length > 0
+            ? db.user.update({
+                where: { id: existingUser.id },
+                data: updates
+              })
+            : existingUser;
+        }
+
+        return db.user.create({
+          data: {
+            email,
+            name: email.split("@")[0] || "Customer",
+            role: UserRole.CUSTOMER,
+            emailVerified: new Date()
+          }
+        });
       }
     })
   ],

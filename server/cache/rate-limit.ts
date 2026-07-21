@@ -1,14 +1,34 @@
 import "server-only";
 import { Ratelimit } from "@upstash/ratelimit";
-import { env } from "@/config/env";
 import { redis } from "@/server/cache/redis";
+import { getIntSetting } from "@/server/services/settings";
 
-export const defaultRateLimit = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(env.RATE_LIMIT_REQUESTS_PER_MINUTE, "1 m"),
-  analytics: true,
-  prefix: "ratelimit:default"
-});
+type RateLimitCache = {
+  requestsPerMinute: number;
+  limiter: Ratelimit;
+};
+
+let defaultRateLimitCache: RateLimitCache | null = null;
+
+export async function getDefaultRateLimit(): Promise<Ratelimit> {
+  const requestsPerMinute = await getIntSetting("rateLimitRequestsPerMin");
+
+  if (defaultRateLimitCache?.requestsPerMinute === requestsPerMinute) {
+    return defaultRateLimitCache.limiter;
+  }
+
+  defaultRateLimitCache = {
+    requestsPerMinute,
+    limiter: new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(requestsPerMinute, "1 m"),
+      analytics: true,
+      prefix: "ratelimit:default"
+    })
+  };
+
+  return defaultRateLimitCache.limiter;
+}
 
 export const authRateLimit = new Ratelimit({
   redis,

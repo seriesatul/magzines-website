@@ -41,7 +41,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     // 2. Perform Secure Cryptographic Signature Match (Rule 7)
-    const isSignatureValid = verifyPaymentSignature(
+    const isSignatureValid = await verifyPaymentSignature(
       payload.razorpayOrderId,
       payload.razorpayPaymentId,
       payload.razorpaySignature
@@ -108,6 +108,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json(
       {
         success: true,
+        orderId: order.id,
         orderNumber: payload.orderNumber
       },
       { status: 200 }

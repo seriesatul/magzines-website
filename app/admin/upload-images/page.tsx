@@ -3,12 +3,19 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
 import { AdminMediaUploader } from "@/components/admin/AdminMediaUploader";
-import { Images, Link as LinkIcon, Save, Plus } from "lucide-react";
+import { Images, Link as LinkIcon, Save, Plus, Trash2 } from "lucide-react";
 
 export const revalidate = 0;
 
 const SECTIONS = ["hero", "banner", "collection", "full-bleed", "reviews", "footer"];
 const MEDIA_TYPES = ["IMAGE", "VIDEO"];
+
+function revalidateMediaViews(): void {
+  revalidatePath("/admin/upload-images");
+  revalidatePath("/admin/banners");
+  revalidatePath("/");
+  revalidateTag("banners");
+}
 
 export default async function AdminUploadImagesPage(): Promise<React.JSX.Element> {
   const banners = await db.banner.findMany({
@@ -35,9 +42,7 @@ export default async function AdminUploadImagesPage(): Promise<React.JSX.Element
         }
       });
 
-      revalidatePath("/admin/upload-images");
-      revalidatePath("/");
-      revalidateTag("banners");
+      revalidateMediaViews();
     } catch (error) {
       logger.error({ error }, "Admin banner creation failed");
     }
@@ -66,11 +71,26 @@ export default async function AdminUploadImagesPage(): Promise<React.JSX.Element
         }
       });
 
-      revalidatePath("/admin/upload-images");
-      revalidatePath("/");
-      revalidateTag("banners");
+      revalidateMediaViews();
     } catch (error) {
       logger.error({ id, error }, "Admin banner update failed");
+    }
+  }
+
+  async function deleteBanner(formData: FormData) {
+    "use server";
+
+    const id = String(formData.get("id") || "");
+    if (!id) return;
+
+    try {
+      await db.banner.delete({
+        where: { id }
+      });
+
+      revalidateMediaViews();
+    } catch (error) {
+      logger.error({ id, error }, "Admin banner deletion failed");
     }
   }
 
@@ -134,10 +154,19 @@ export default async function AdminUploadImagesPage(): Promise<React.JSX.Element
                     <input name="redirectUrl" defaultValue={banner.redirectUrl || ""} placeholder="/products/classic-keepsake" className="h-10 w-full border border-stone-200 bg-[#FAFAF8] pl-10 pr-3 text-xs outline-none focus:border-brand" />
                     <LinkIcon className="absolute left-3 top-3 h-4 w-4 text-stone-400" />
                   </div>
-                  <button className="inline-flex h-10 items-center gap-2 bg-stone-900 px-5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand">
-                    <Save className="h-3.5 w-3.5" />
-                    Save Media
-                  </button>
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand">
+                      <Save className="h-3.5 w-3.5" />
+                      Save Media
+                    </button>
+                    <button
+                      formAction={deleteBanner}
+                      className="inline-flex h-10 items-center justify-center gap-2 border border-red-900/30 bg-white px-5 text-[10px] font-bold uppercase tracking-widest text-red-800 transition hover:border-red-900 hover:bg-red-950 hover:text-white"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </form>
             ))

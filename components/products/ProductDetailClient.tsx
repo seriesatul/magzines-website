@@ -1,88 +1,149 @@
 "use client";
 
-import React, { useState, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Check, ImagePlus, Trash2 } from "lucide-react";
 import { type StorefrontProductDetails } from "@/lib/products";
 import { formatPaise } from "@/server/db/money";
 import { RevealOnScroll } from "@/components/storefront/RevealOnScroll";
+import { useCart } from "@/components/storefront/CartProvider";
+import { type PhotobookCartItem } from "@/types/photobook";
 
 const FALLBACK_PRODUCT_IMAGE =
   "https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=1200&q=80";
+
+type UploadStatus = "pending" | "uploading" | "success" | "error";
+
+type PhotoUploadState = {
+  id: string;
+  file: File;
+  progress: number;
+  status: UploadStatus;
+  key?: string;
+  publicUrl?: string;
+  localPreviewUrl: string;
+};
 
 interface ProductDetailClientProps {
   product: StorefrontProductDetails;
 }
 
-// Track R2 upload status per file dynamically
-interface PhotoUploadState {
-  id: string; // Unique file ID (filename + size)
-  file: File;
-  progress: number; // 0 to 100
-  status: "pending" | "uploading" | "success" | "error";
-  key?: string;
-  publicUrl?: string;
-  localPreviewUrl: string;
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const DIRECT_CHECKOUT_STORAGE_KEY = "hearts-and-beans-direct-checkout";
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return "Upload failed.";
 }
 
-interface LocalCartItem {
-  productId: string;
-  name: string;
-  pricePaise: number;
-  quantity: number;
-  customMessage: string;
-  uploadLaterOnWhatsApp: boolean;
-  photos: Array<{
-    key: string;
-    url: string;
-    name: string;
-    size: number;
-  }>;
-  imageUrl: string;
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function ProductDetailClient({ product }: ProductDetailClientProps): React.JSX.Element {
+  const router = useRouter();
+  const { addItem } = useCart();
+  const previewUrlsRef = useRef<Set<string>>(new Set());
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [customMessage, setCustomMessage] = useState("");
-  const [uploadLater, setUploadLater] = useState(false);
-  
-  // Track direct R2 uploads in progress (Rule 4.2 & 4.3)
+  const [customizationDescription, setCustomizationDescription] = useState("");
   const [photoUploads, setPhotoUploads] = useState<PhotoUploadState[]>([]);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [addSuccess, setAddSuccess] = useState(false);
 
-  // Dynamic Date calculation
+  useEffect(() => {
+    return () => {
+      previewUrlsRef.current.forEach((previewUrl) => URL.revokeObjectURL(previewUrl));
+      previewUrlsRef.current.clear();
+    };
+  }, []);
+
+  const successfulUploads = useMemo(
+    () =>
+      photoUploads.filter(
+        (item): item is PhotoUploadState & { publicUrl: string } =>
+          item.status === "success" && Boolean(item.publicUrl)
+      ),
+    [photoUploads]
+  );
+
   const deliveryEstimate = useMemo(() => {
     const date = new Date();
     date.setDate(date.getDate() + product.productionDays + 4);
 
-    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const months = [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December"
-    ];
-
-    const dayName = days[date.getDay()];
-    const dayNum = date.getDate();
-    const monthName = months[date.getMonth()];
-
-    return `Arrives by ${dayName}, ${dayNum} ${monthName}`;
+    return `Arrives by ${date.toLocaleDateString("en-IN", {
+      weekday: "long",
+      day: "numeric",
+      month: "long"
+    })}`;
   }, [product.productionDays]);
 
-  // Size/Type limits
-  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
-  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
-    processAndUploadFiles(Array.from(e.target.files));
+  const updateUploadStatus = (id: string, updates: Partial<PhotoUploadState>) => {
+    setPhotoUploads((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...updates } : item))
+    );
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    if (e.dataTransfer.files) {
-      processAndUploadFiles(Array.from(e.dataTransfer.files));
+  const uploadFileToR2 = async (id: string, file: File) => {
+    updateUploadStatus(id, { status: "uploading", progress: 0 });
+
+    try {
+      const presignResponse = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          fileSize: file.size
+        })
+      });
+      const presignData = await presignResponse.json();
+
+      if (!presignResponse.ok || !presignData.uploadUrl) {
+        throw new Error(getErrorMessage(presignData.error) || "Could not authorize upload.");
+      }
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", presignData.uploadUrl, true);
+      xhr.setRequestHeader("Content-Type", file.type);
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          updateUploadStatus(id, { progress: Math.round((event.loaded / event.total) * 100) });
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          updateUploadStatus(id, {
+            status: "success",
+            progress: 100,
+            key: presignData.key,
+            publicUrl: presignData.publicUrl
+          });
+        } else {
+          updateUploadStatus(id, { status: "error" });
+        }
+      };
+      xhr.onerror = () => updateUploadStatus(id, { status: "error" });
+      xhr.send(file);
+    } catch {
+      updateUploadStatus(id, { status: "error" });
     }
   };
 
@@ -95,424 +156,398 @@ export function ProductDetailClient({ product }: ProductDetailClientProps): Reac
         setValidationError(`Invalid file type: ${file.name}. Only JPEG, PNG, and WEBP are allowed.`);
         return;
       }
+
       if (file.size > MAX_FILE_SIZE) {
         setValidationError(`File too large: ${file.name}. Each photo must be smaller than 10MB.`);
         return;
       }
 
-      const id = `${file.name}-${file.size}-${Date.now()}`;
+      const localPreviewUrl = URL.createObjectURL(file);
+      const id = `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      previewUrlsRef.current.add(localPreviewUrl);
+
       newUploads.push({
         id,
         file,
         progress: 0,
         status: "pending",
-        localPreviewUrl: URL.createObjectURL(file)
+        localPreviewUrl
       });
     }
 
-    setPhotoUploads((prev) => {
-      const combined = [...prev, ...newUploads];
-      if (combined.length > product.maxPhotos) {
+    setPhotoUploads((current) => {
+      if (current.length + newUploads.length > product.maxPhotos) {
+        newUploads.forEach((upload) => {
+          URL.revokeObjectURL(upload.localPreviewUrl);
+          previewUrlsRef.current.delete(upload.localPreviewUrl);
+        });
         setValidationError(`Maximum photo limit exceeded. This format is capped at ${product.maxPhotos} photos.`);
-        return prev;
+        return current;
       }
-      
-      // Instantly trigger parallel background uploads for all added files
-      newUploads.forEach((item) => uploadFileToR2(item.id, item.file));
-      return combined;
-    });
-  };
 
-  // Perform Direct Browser-to-R2 progressive upload (Rule 4.1 & 4.2)
-  const uploadFileToR2 = async (id: string, file: File) => {
-    updateUploadStatus(id, { status: "uploading", progress: 0 });
-
-    try {
-      // 1. Fetch secure pre-signed PUT signature from our API
-      const presignRes = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type,
-          fileSize: file.size
-        })
+      newUploads.forEach((item) => {
+        void uploadFileToR2(item.id, item.file);
       });
 
-      const presignData = await presignRes.json();
-
-      if (!presignRes.ok || !presignData.uploadUrl) {
-        throw new Error(presignData.error || "Presigning authorization failed");
-      }
-
-      // 2. Perform direct upload using standard XHR to track progress events natively
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", presignData.uploadUrl, true);
-      xhr.setRequestHeader("Content-Type", file.type);
-
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percentComplete = Math.round((event.loaded / event.total) * 100);
-          updateUploadStatus(id, { progress: percentComplete });
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status === 200) {
-          updateUploadStatus(id, {
-            status: "success",
-            progress: 100,
-            key: presignData.key,
-            publicUrl: presignData.publicUrl
-          });
-        } else {
-          updateUploadStatus(id, { status: "error" });
-        }
-      };
-
-      xhr.onerror = () => {
-        updateUploadStatus(id, { status: "error" });
-      };
-
-      xhr.send(file);
-    } catch {
-      updateUploadStatus(id, { status: "error" });
-    }
-  };
-
-  const updateUploadStatus = (id: string, updates: Partial<PhotoUploadState>) => {
-    setPhotoUploads((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
-    );
+      return [...current, ...newUploads];
+    });
   };
 
   const removeUpload = (id: string) => {
-    setPhotoUploads((prev) => {
-      const target = prev.find((item) => item.id === id);
+    const target = photoUploads.find((item) => item.id === id);
+
+    setPhotoUploads((current) => {
       if (target) {
-        URL.revokeObjectURL(target.localPreviewUrl); // Revoke memory link cleanly
+        URL.revokeObjectURL(target.localPreviewUrl);
+        previewUrlsRef.current.delete(target.localPreviewUrl);
       }
-      return prev.filter((item) => item.id !== id);
+      return current.filter((item) => item.id !== id);
     });
-    setValidationError(null);
   };
 
   const retryUpload = (id: string) => {
     const target = photoUploads.find((item) => item.id === id);
     if (target) {
-      uploadFileToR2(id, target.file);
+      void uploadFileToR2(id, target.file);
     }
   };
 
-  // 3. Add to Persistent Local Cart
-  const handleAddToCart = () => {
+  const createCartItem = (): PhotobookCartItem | null => {
     setValidationError(null);
 
-    // Filter uploads
-    const successfulUploads = photoUploads.filter((item) => item.status === "success");
-    const activeUploads = photoUploads.filter((item) => item.status === "uploading" || item.status === "pending");
+    const activeUploads = photoUploads.filter(
+      (item) => item.status === "uploading" || item.status === "pending"
+    );
     const failedUploads = photoUploads.filter((item) => item.status === "error");
 
-    if (!uploadLater) {
-      if (activeUploads.length > 0) {
-        setValidationError("Please wait for your photos to finish uploading before adding to cart.");
-        return;
-      }
-      if (failedUploads.length > 0) {
-        setValidationError("Some of your photos failed to upload. Please click 'Retry' or remove them.");
-        return;
-      }
-      if (successfulUploads.length < product.minPhotos) {
-        setValidationError(
-          `Please attach at least ${product.minPhotos} photos to order this layout, or toggle the "Upload later via WhatsApp" switch.`
-        );
-        return;
-      }
+    if (activeUploads.length > 0) {
+      setValidationError("Please wait for your photos to finish uploading before continuing.");
+      return null;
+    }
+
+    if (failedUploads.length > 0) {
+      setValidationError("Some photos failed to upload. Retry or remove them before checkout.");
+      return null;
+    }
+
+    if (successfulUploads.length < product.minPhotos) {
+      setValidationError(`Upload at least ${product.minPhotos} photos for this format.`);
+      return null;
+    }
+
+    const description = customizationDescription.trim();
+    const uploadedPhotos = successfulUploads.map((item) => ({
+      key: item.key || "",
+      url: item.publicUrl,
+      name: item.file.name,
+      size: item.file.size,
+      mimeType: item.file.type
+    }));
+
+    const cartItem: PhotobookCartItem = {
+      id: `${product.id}-${Date.now()}`,
+      productId: product.id,
+      slug: product.slug,
+      name: product.name,
+      pricePaise: product.pricePaise,
+      quantity: 1,
+      ...(description ? { customMessage: description } : {}),
+      uploadLaterOnWhatsApp: false,
+      photos: uploadedPhotos,
+      photosCount: uploadedPhotos.length,
+      layoutMetadata: [],
+      imageUrl: product.imageUrl,
+      imageAlt: product.imageAlt
+    };
+
+    return cartItem;
+  };
+
+  const handleAddToCart = () => {
+    const cartItem = createCartItem();
+
+    if (!cartItem) {
+      return;
     }
 
     setIsAdding(true);
+    addItem(cartItem, 1);
+    setAddSuccess(true);
+    setIsAdding(false);
+    window.setTimeout(() => setAddSuccess(false), 2500);
+  };
 
-    try {
-      const existingCartRaw = localStorage.getItem("hearts-and-beans-cart");
-      const cart: LocalCartItem[] = existingCartRaw ? JSON.parse(existingCartRaw) : [];
+  const handlePlaceOrder = () => {
+    const cartItem = createCartItem();
 
-      const cartItem: LocalCartItem = {
-        productId: product.id,
-        name: product.name,
-        pricePaise: product.pricePaise,
-        quantity: 1,
-        customMessage,
-        uploadLaterOnWhatsApp: uploadLater,
-        // Map permanent R2 storage keys and public links into cart item
-        photos: uploadLater
-          ? []
-          : successfulUploads.map((item) => ({
-              key: item.key || "",
-              url: item.publicUrl || "",
-              name: item.file.name,
-              size: item.file.size
-            })),
-        imageUrl: product.imageUrl
-      };
-
-      cart.push(cartItem);
-      localStorage.setItem("hearts-and-beans-cart", JSON.stringify(cart));
-
-      setAddSuccess(true);
-      setTimeout(() => {
-        setAddSuccess(false);
-      }, 2500);
-    } catch {
-      setValidationError("Failed to save item to cart. Please try again.");
-    } finally {
-      setIsAdding(false);
+    if (!cartItem) {
+      return;
     }
+
+    setIsPlacingOrder(true);
+    window.localStorage.setItem(DIRECT_CHECKOUT_STORAGE_KEY, JSON.stringify(cartItem));
+    router.push("/checkout?mode=direct");
   };
 
   const isOutOfStock = product.stockQuantity <= 0;
 
   return (
-    <main className="bg-[#FAFAF8] text-[#0A0A0A] p-6 md:p-12 min-h-screen">
-      <div className="mx-auto max-w-[1440px] grid lg:grid-cols-[1.1fr_0.9fr] gap-12 lg:gap-16 pt-6">
-        
-        {/* Left Column: Image Galleries */}
-        <div className="space-y-6">
-          <RevealOnScroll className="relative w-full aspect-[4/5] border border-stone-200 overflow-hidden bg-white">
+    <main className="min-h-screen bg-[#FAFAF8] px-5 py-8 text-[#0A0A0A] md:px-8 md:py-10">
+      <div className="mx-auto grid max-w-[1440px] gap-8 xl:grid-cols-[0.86fr_1.14fr] xl:items-start">
+        <div className="space-y-4 xl:sticky xl:top-24">
+          <RevealOnScroll className="relative aspect-[4/5] w-full overflow-hidden border border-stone-200 bg-white xl:max-h-[calc(100svh-170px)]">
             <Image
               src={product.images[activeImageIndex]?.url || FALLBACK_PRODUCT_IMAGE}
               alt={product.images[activeImageIndex]?.alt || product.imageAlt}
               fill
               priority
-              sizes="(min-width: 1024px) 50vw, 100vw"
-              className="object-cover scale-100 hover:scale-[1.04] transition duration-500 ease-editorial"
+              sizes="(min-width: 1280px) 42vw, 100vw"
+              className="object-cover transition duration-500 ease-editorial hover:scale-[1.04]"
             />
           </RevealOnScroll>
 
-          {/* Secondary Thumbnail Swapper */}
-          {product.images.length > 1 && (
+          {product.images.length > 1 ? (
             <div className="grid grid-cols-4 gap-2">
-              {product.images.map((img, i) => (
+              {product.images.map((image, index) => (
                 <button
-                  key={`${product.id}-thumbnail-${i}`}
-                  onClick={() => setActiveImageIndex(i)}
-                  className={`relative aspect-[4/5] border transition duration-200 ${
-                    activeImageIndex === i ? "border-brand border-2" : "border-stone-200"
+                  key={`${product.id}-thumbnail-${index}`}
+                  type="button"
+                  onClick={() => setActiveImageIndex(index)}
+                  className={`relative aspect-[4/5] overflow-hidden border transition duration-200 ${
+                    activeImageIndex === index ? "border-2 border-brand" : "border-stone-200"
                   }`}
                 >
-                  <Image src={img.url} alt={img.alt} fill className="object-cover" />
+                  <Image src={image.url} alt={image.alt} fill sizes="120px" className="object-cover" />
                 </button>
               ))}
             </div>
-          )}
+          ) : null}
         </div>
 
-        {/* Right Column: Custom Configuration Panel */}
-        <div className="flex flex-col justify-center">
-          <RevealOnScroll className="space-y-8">
+        <RevealOnScroll className="border border-stone-200 bg-white p-4 md:p-6">
+          <div className="grid gap-5 border-b border-stone-200 pb-5 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-end">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-brand">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-brand">
                 Premium Format / {product.productionDays} Days Crafting
               </p>
-              <h1 className="mt-4 font-serif text-5xl font-black leading-[0.95] text-stone-900 md:text-6xl">
-                {product.name}
+              <h1 className="mt-3 font-serif text-4xl font-black leading-[0.95] tracking-[-0.03em] text-stone-900 md:text-5xl">
+                <span className="font-black not-italic">{product.name}</span>
+                <span className="font-normal italic"> Custom</span>
               </h1>
-              <p className="mt-4 text-xl font-bold text-stone-900">
-                {formatPaise(product.pricePaise)}
-              </p>
-              <p className="mt-6 text-sm font-light leading-7 text-stone-600">
+              <p className="mt-4 max-w-[62ch] text-sm font-light leading-6 text-stone-600">
                 {product.description}
               </p>
             </div>
 
-            {/* Dynamic Estimated Delivery Box */}
-            <div className="bg-stone-50 border border-stone-200/80 p-4 rounded-none text-xs flex items-center gap-3">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="font-semibold text-stone-900">{deliveryEstimate}</span>
-              <span className="text-stone-400 font-mono">| Metro Express Courier</span>
-            </div>
-
-            {/* Special Dedication Textarea */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <label className="block text-xs font-bold uppercase tracking-wider text-stone-500">
-                  Custom Dedication (Optional)
-                </label>
-                <span className="text-[10px] text-stone-400 font-mono">
-                  {customMessage.length}/250 chars
-                </span>
+            <div className="grid grid-cols-2 gap-2 text-xs xl:grid-cols-1">
+              <div className="border border-stone-200 bg-[#FAFAF8] p-3">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-stone-400">Price</p>
+                <p className="mt-1 font-mono text-sm font-bold text-stone-900">{formatPaise(product.pricePaise)}</p>
               </div>
-              <textarea
-                value={customMessage}
-                onChange={(e) => setCustomMessage(e.target.value.slice(0, 250))}
-                placeholder="Write your custom spine title, year, or a short message to print on page 1..."
-                className="w-full min-h-[90px] p-4 text-sm bg-white border border-stone-200 focus:outline-none focus:border-brand rounded-none resize-none font-light placeholder:text-stone-400"
-              />
+              <div className="border border-stone-200 bg-[#FAFAF8] p-3">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-stone-400">Delivery</p>
+                <p className="mt-1 text-[11px] font-medium leading-4 text-stone-900">{deliveryEstimate}</p>
+              </div>
             </div>
+          </div>
 
-            {/* Photos Upload Switcher */}
-            <div className="space-y-6">
-              <div className="flex items-center justify-between border-t border-stone-200 pt-6">
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900">
-                    Upload photos later on WhatsApp?
-                  </h3>
-                  <p className="text-[11px] text-stone-500 font-light mt-1">
-                    Toggle this if you do not have your photos ready right now.
-                  </p>
+          <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(320px,0.95fr)_minmax(360px,1fr)]">
+            <section className="space-y-4">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="border border-stone-200 bg-[#FAFAF8] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-stone-400">Uploaded</p>
+                  <p className="font-serif text-2xl font-black text-stone-900">{successfulUploads.length}</p>
                 </div>
-                <button
-                  onClick={() => setUploadLater(!uploadLater)}
-                  className={`w-12 h-6 flex items-center p-1 cursor-pointer transition duration-300 rounded-none ${
-                    uploadLater ? "bg-brand" : "bg-stone-300"
-                  }`}
-                >
-                  <div
-                    className={`bg-white w-4 h-4 shadow-sm transition duration-300 ${
-                      uploadLater ? "translate-x-6" : "translate-x-0"
-                    }`}
-                  />
-                </button>
+                <div className="border border-stone-200 bg-[#FAFAF8] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-stone-400">Required</p>
+                  <p className="font-serif text-2xl font-black text-stone-900">{product.minPhotos}</p>
+                </div>
+                <div className="border border-stone-200 bg-[#FAFAF8] p-3">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-stone-400">Limit</p>
+                  <p className="font-serif text-2xl font-black text-stone-900">{product.maxPhotos}</p>
+                </div>
               </div>
 
-              {/* Dynamic Dropper Zone */}
-              {!uploadLater ? (
-                <div className="space-y-4 transition duration-300">
-                  <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-stone-500">
-                    <span>Select photos ({product.minPhotos}-{product.maxPhotos} required)</span>
-                    <span className="font-mono text-stone-900">
-                      {photoUploads.filter((item) => item.status === "success").length} / {product.maxPhotos} Uploaded
-                    </span>
-                  </div>
+              <label
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  processAndUploadFiles(Array.from(event.dataTransfer.files));
+                }}
+                className="flex min-h-[240px] cursor-pointer flex-col items-center justify-center gap-4 border border-dashed border-stone-300 bg-[#FAFAF8] p-8 text-center transition hover:border-brand"
+              >
+                <span className="flex h-14 w-14 items-center justify-center border border-stone-900 bg-white text-brand">
+                  <ImagePlus className="h-6 w-6" />
+                </span>
+                <span className="font-serif text-2xl font-black leading-none text-stone-900">
+                  Upload <span className="font-normal italic text-stone-700">Original Photos</span>
+                </span>
+                <span className="max-w-[38ch] text-xs font-light leading-5 text-stone-500">
+                  Drop files here or select from your device. We upload the original image files without resizing or compression.
+                </span>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  onChange={(event) => {
+                    processAndUploadFiles(Array.from(event.target.files || []));
+                    event.target.value = "";
+                  }}
+                />
+              </label>
 
-                  <div
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={handleDrop}
-                    className="border border-dashed border-stone-300 hover:border-brand bg-white p-8 text-center cursor-pointer transition duration-200"
-                  >
-                    <input
-                      type="file"
-                      multiple
-                      id="photo-uploader"
-                      className="hidden"
-                      onChange={handleFileChange}
-                      accept="image/*"
-                    />
-                    <label htmlFor="photo-uploader" className="cursor-pointer block space-y-2">
-                      <span className="block text-xs font-bold uppercase tracking-wider text-stone-900">
-                        Drag & Drop or click to select
-                      </span>
-                      <span className="block text-[11px] text-stone-400">
-                        PNG, JPG, or WEBP formats up to 10MB per image
-                      </span>
-                    </label>
-                  </div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
+                JPG, PNG, or WEBP / Up to 10MB each
+              </p>
+            </section>
 
-                  {/* Attachment Progress Previews & Grids (Rule 4.2 & 4.3) */}
-                  {photoUploads.length > 0 && (
-                    <div className="grid grid-cols-5 md:grid-cols-6 gap-2 max-h-[220px] overflow-y-auto border border-stone-200 p-3 bg-white">
-                      {photoUploads.map((item) => (
-                        <div
-                          key={item.id}
-                          className="relative aspect-square border border-stone-200 group overflow-hidden bg-stone-950"
-                        >
-                          <Image
-                            src={item.localPreviewUrl}
-                            alt="Attached uploader thumbnail"
-                            fill
-                            className={`object-cover transition-opacity duration-300 ${
-                              item.status === "uploading" || item.status === "pending" ? "opacity-40" : "opacity-100"
+            <section className="space-y-4">
+              <label className="block text-xs font-bold uppercase tracking-wider text-stone-400">
+                Customization description
+                <textarea
+                  value={customizationDescription}
+                  onChange={(event) => setCustomizationDescription(event.target.value.slice(0, 1000))}
+                  placeholder="Describe your cover text, page sequence, theme, captions, cropping notes, or any special print instructions..."
+                  className="mt-2 min-h-[150px] w-full resize-none border border-stone-200 bg-[#FAFAF8] p-4 text-sm font-light leading-6 outline-none placeholder:text-stone-400 focus:border-brand"
+                />
+              </label>
+
+              <div className="border border-stone-200 bg-[#FAFAF8] p-4">
+                <div className="flex items-center justify-between gap-4 border-b border-stone-200 pb-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand">
+                    Client Photos
+                  </p>
+                  <span className="text-[10px] font-mono text-stone-400">
+                    {photoUploads.length}/{product.maxPhotos}
+                  </span>
+                </div>
+
+                {photoUploads.length > 0 ? (
+                  <div className="mt-4 grid max-h-[360px] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
+                    {photoUploads.map((upload) => (
+                      <article key={upload.id} className="group border border-stone-200 bg-white p-2">
+                        <div className="relative aspect-square overflow-hidden bg-stone-900">
+                          <img
+                            src={upload.localPreviewUrl}
+                            alt={upload.file.name}
+                            className={`h-full w-full object-cover ${
+                              upload.status === "error" ? "grayscale" : ""
                             }`}
                           />
-
-                          {/* Progress bar overlay indicator */}
-                          {(item.status === "uploading" || item.status === "pending") && (
-                            <div className="absolute inset-0 flex flex-col justify-end p-1.5 bg-stone-950/40">
-                              <span className="text-[10px] font-mono text-white font-bold leading-none mb-1">
-                                {item.progress}%
-                              </span>
-                              <div className="w-full h-1 bg-white/20 overflow-hidden">
-                                <div className="h-full bg-brand transition-all" style={{ width: `${item.progress}%` }} />
+                          {upload.status === "uploading" || upload.status === "pending" ? (
+                            <div className="absolute inset-x-0 bottom-0 bg-stone-900/90 p-2">
+                              <div className="mb-1 flex justify-between text-[8px] font-bold uppercase tracking-wider text-white">
+                                <span>Uploading Original</span>
+                                <span>{upload.progress}%</span>
+                              </div>
+                              <div className="h-1 bg-white/20">
+                                <div className="h-full bg-brand" style={{ width: `${upload.progress}%` }} />
                               </div>
                             </div>
-                          )}
-
-                          {/* Success checkmark overlay */}
-                          {item.status === "success" && (
-                            <div className="absolute top-1 right-1 bg-emerald-600 text-white rounded-none p-0.5 text-[8px] uppercase tracking-wider font-bold">
-                              OK
-                            </div>
-                          )}
-
-                          {/* Error overlay with retry options */}
-                          {item.status === "error" && (
-                            <div className="absolute inset-0 bg-red-950/80 flex flex-col items-center justify-center p-1 text-center space-y-1">
-                              <span className="text-[8px] text-red-200 font-bold uppercase leading-none">Failed</span>
-                              <button
-                                onClick={() => retryUpload(item.id)}
-                                className="text-[9px] text-white underline font-bold uppercase tracking-wider"
-                              >
-                                Retry
-                              </button>
-                            </div>
-                          )}
-
-                          {/* Remove overlay button */}
+                          ) : null}
+                          {upload.status === "success" ? (
+                            <span className="absolute right-2 top-2 bg-brand px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-white">
+                              Uploaded
+                            </span>
+                          ) : null}
+                          {upload.status === "error" ? (
+                            <button
+                              type="button"
+                              onClick={() => retryUpload(upload.id)}
+                              className="absolute inset-0 flex items-center justify-center bg-red-950/85 text-[9px] font-bold uppercase tracking-widest text-white"
+                            >
+                              Retry Upload
+                            </button>
+                          ) : null}
                           <button
-                            onClick={() => removeUpload(item.id)}
-                            className="absolute inset-0 bg-stone-950/70 opacity-0 group-hover:opacity-100 flex items-center justify-center transition duration-150 text-white text-[9px] uppercase font-black"
+                            type="button"
+                            onClick={() => removeUpload(upload.id)}
+                            className="absolute left-2 top-2 flex h-8 w-8 items-center justify-center border border-stone-900 bg-white text-stone-900 transition hover:bg-brand hover:text-white"
+                            aria-label={`Remove ${upload.file.name}`}
                           >
-                            Remove
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-stone-50 border border-dashed border-stone-300 p-5 space-y-2 transition duration-300">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#C1440E]">
-                    Order now, Upload on WhatsApp later
-                  </h4>
-                  <p className="text-[11px] text-stone-500 leading-5 font-light">
-                    You can finish your checkout securely now. Once your payment confirms, our direct Meta WhatsApp API 
-                    system will message you with a step-by-step layout guide and a secure link to upload your {product.minPhotos} photos directly over chat.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Validation errors */}
-            {validationError && (
-              <div className="text-xs text-red-600 bg-red-50 border border-red-200 p-3 rounded-none font-medium">
-                {validationError}
+                        <div className="mt-2 min-w-0">
+                          <p className="truncate text-[11px] font-bold text-stone-900">{upload.file.name}</p>
+                          <p className="mt-1 text-[10px] font-mono text-stone-400">
+                            {formatFileSize(upload.file.size)}
+                          </p>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-4 border border-dashed border-stone-300 bg-white p-8 text-center">
+                    <p className="font-serif text-xl italic text-stone-400">No photos uploaded yet.</p>
+                  </div>
+                )}
               </div>
-            )}
 
-            {/* Action buy buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t border-stone-200">
-              <button
-                onClick={handleAddToCart}
-                disabled={isOutOfStock || isAdding}
-                className={`flex-1 h-14 inline-flex items-center justify-center text-xs uppercase font-bold tracking-widest text-white transition duration-300 rounded-none ${
-                  isOutOfStock
-                    ? "bg-stone-300 cursor-not-allowed text-stone-500"
-                    : addSuccess
-                    ? "bg-emerald-600"
-                    : "bg-stone-900 hover:bg-brand"
-                }`}
-              >
-                {isOutOfStock ? "Out of Stock" : isAdding ? "Saving to Cart..." : addSuccess ? "Added to Cart! ✓" : "Start your order"}
-              </button>
-              <Link
-                href="/#products"
-                className="h-14 inline-flex items-center justify-center border border-stone-300 text-stone-900 text-xs uppercase font-bold tracking-widest px-8 rounded-none hover:border-brand hover:text-brand transition duration-300 bg-white"
-              >
-                Back to collection
-              </Link>
-            </div>
-          </RevealOnScroll>
-        </div>
+              {validationError ? (
+                <div className="border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700">
+                  {validationError}
+                </div>
+              ) : null}
 
+              <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={handlePlaceOrder}
+                    disabled={isOutOfStock || isPlacingOrder}
+                    className={`inline-flex h-14 items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest text-white transition duration-200 ${
+                      isOutOfStock
+                        ? "cursor-not-allowed bg-stone-300 text-stone-600"
+                        : "bg-stone-900 hover:bg-brand"
+                    }`}
+                  >
+                    {isOutOfStock ? (
+                      "Out of Stock"
+                    ) : isPlacingOrder ? (
+                      "Opening Checkout..."
+                    ) : (
+                      <>
+                        Place order
+                        <ArrowRight className="h-4 w-4" />
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddToCart}
+                    disabled={isOutOfStock || isAdding || isPlacingOrder}
+                    className={`inline-flex h-14 items-center justify-center gap-2 border text-xs font-bold uppercase tracking-widest transition duration-200 ${
+                      isOutOfStock
+                        ? "cursor-not-allowed border-stone-200 bg-stone-100 text-stone-400"
+                        : addSuccess
+                          ? "border-emerald-700 bg-emerald-50 text-emerald-700"
+                          : "border-stone-900 bg-white text-stone-900 hover:border-brand hover:text-brand"
+                    }`}
+                  >
+                    {isAdding ? (
+                      "Adding..."
+                    ) : addSuccess ? (
+                      <>
+                        <Check className="h-4 w-4" />
+                        Added to Cart
+                      </>
+                    ) : (
+                      "Add to Cart"
+                    )}
+                  </button>
+                </div>
+                <Link
+                  href="/#products"
+                  className="inline-flex h-11 w-full items-center justify-center border border-stone-300 bg-white px-6 text-xs font-bold uppercase tracking-widest text-stone-900 transition duration-200 hover:border-brand hover:text-brand"
+                >
+                  Back to collection
+                </Link>
+              </div>
+            </section>
+          </div>
+        </RevealOnScroll>
       </div>
     </main>
   );

@@ -1,7 +1,6 @@
 import { Suspense } from "react";
-import { ProductCard } from "@/components/storefront/ProductCard";
+import { ProductBrowser } from "@/components/storefront/ProductBrowser";
 import { ProductCardSkeleton } from "@/components/storefront/ProductCardSkeleton";
-import { RevealOnScroll } from "@/components/storefront/RevealOnScroll";
 import type { StorefrontProduct } from "@/lib/products";
 
 type ProductGridProps = {
@@ -23,35 +22,24 @@ async function ProductGridContent({
 
   if (products.length === 0) {
     return (
-      <div className="border-y border-stone-200 py-12">
-        <h2 className="font-serif text-4xl font-bold text-stone-900">
-          No <span className="font-normal italic">editions</span> available right now
+      <div className="border border-stone-200 bg-stone-50 p-8 text-center">
+        <h2 className="text-lg font-semibold text-stone-950">
+          No products available
         </h2>
-        <p className="mt-4 max-w-xl text-sm font-light leading-7 text-stone-600">
+        <p className="mt-2 text-sm text-stone-600">
           New custom magazine products will appear here as soon as they are active in the shop.
         </p>
       </div>
     );
   }
 
-  return (
-    <div className="grid gap-x-6 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">
-      {products.map((product, index) => (
-        <RevealOnScroll
-          key={product.id}
-          className={index % 3 === 1 ? "lg:pt-16" : index % 3 === 2 ? "lg:pt-8" : ""}
-        >
-          <ProductCard product={product} />
-        </RevealOnScroll>
-      ))}
-    </div>
-  );
+  return <ProductBrowser products={products} />;
 }
 
 function ProductGridSkeleton(): React.ReactElement {
   return (
-    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: 6 }, (_, index) => (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:gap-x-5 lg:grid-cols-4">
+      {Array.from({ length: 8 }, (_, index) => (
         <ProductCardSkeleton key={index} />
       ))}
     </div>

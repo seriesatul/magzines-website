@@ -233,6 +233,35 @@ model SiteSetting {
   @@index([isSecret])
 }
 
+model Setting {
+  id                          String   @id @default("global")
+  freeShippingThresholdPaise  Int      @default(99900)
+  defaultShippingFeePaise     Int      @default(12000)
+  partialCodAdvancePaise      Int      @default(12000)
+  partialCodFeePaise          Int      @default(12000)
+  rateLimitRequestsPerMin     Int      @default(120)
+  razorpayKeyId               String?
+  razorpayKeySecret           String?
+  resendApiKey                String?
+  resendFromEmail             String?
+  supportEmail                String?
+  supportPhone                String?
+  whatsappNumber              String?
+  instagramUrl                String?
+  facebookUrl                 String?
+  youtubeUrl                  String?
+  xUrl                        String?
+  linkedinUrl                 String?
+  cloudflareR2AccountId       String?
+  cloudflareR2AccessKeyId     String?
+  cloudflareR2SecretAccessKey String?
+  cloudflareR2BucketName      String?
+  cloudflareR2PublicBaseUrl   String?
+  metaWaAccessToken           String?
+  metaWaPhoneNumberId         String?
+  updatedAt                   DateTime @updatedAt
+}
+
 model ProductImage {
   id        String   @id @default(cuid())
   productId String
@@ -322,6 +351,7 @@ model OrderItem {
   unitPricePaise     Int
   totalPricePaise    Int
   customMessage      String?  @db.Text
+  layoutMetadata     Json?
   order              Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product            Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
   createdAt          DateTime @default(now())

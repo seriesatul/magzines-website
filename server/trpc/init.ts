@@ -2,7 +2,7 @@ import "server-only";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { UserRole } from "@prisma/client";
-import { defaultRateLimit } from "@/server/cache/rate-limit";
+import { getDefaultRateLimit } from "@/server/cache/rate-limit";
 import { logger } from "@/server/logger/logger";
 import type { TRPCContext } from "@/server/trpc/context";
 
@@ -16,6 +16,7 @@ const t = initTRPC.context<TRPCContext>().create({
 const rateLimitMiddleware = t.middleware(async ({ ctx, next, path }) => {
   try {
     const identity = ctx.session?.user?.id ?? ctx.ipAddress;
+    const defaultRateLimit = await getDefaultRateLimit();
     const result = await defaultRateLimit.limit(`${path}:${identity}`);
 
     if (!result.success) {

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { AddToCartButton } from "@/components/storefront/AddToCartButton";
+import { ArrowRight } from "lucide-react";
 import { formatPaise } from "@/server/db/money";
 import type { StorefrontProduct } from "@/lib/products";
 
@@ -10,59 +10,68 @@ type ProductCardProps = {
 
 export function ProductCard({ product }: ProductCardProps): React.ReactElement {
   const isOutOfStock = product.stockQuantity <= 0;
-  const metadata = `Custom / Printed / Ships in ${product.productionDays} days`;
+  const hasCustomerDiscount =
+    product.salePricePaise !== null && product.salePricePaise < product.basePricePaise;
 
   return (
-    <article className="group">
+    <article className="group bg-transparent">
       <Link
         href={`/products/${product.slug}`}
         className={isOutOfStock ? "pointer-events-none" : "block"}
         aria-disabled={isOutOfStock}
       >
-        <div className="relative aspect-[3/4] overflow-hidden bg-stone-50">
+        <div className="relative aspect-[3/4] overflow-hidden border border-stone-200 bg-[#FAFAF8]">
           <Image
             src={product.imageUrl}
             alt={product.imageAlt}
             fill
-            sizes="(min-width: 1024px) 31vw, (min-width: 640px) 45vw, 100vw"
+            sizes="(min-width: 1280px) 30vw, (min-width: 640px) 45vw, 90vw"
             className={`object-cover transition duration-500 ease-out group-hover:scale-[1.04] ${
               isOutOfStock ? "grayscale" : ""
             }`}
             priority={false}
           />
-          {isOutOfStock ? (
-            <span className="absolute left-4 top-4 bg-white px-3 py-2 text-[0.6875rem] font-medium uppercase tracking-normal text-stone-900">
-              Out of Stock
+          {isOutOfStock && (
+            <span className="absolute left-3 top-3 border border-stone-200 bg-white px-3 py-1.5 text-[0.625rem] font-medium uppercase tracking-[0.08em] text-stone-900">
+              Out of stock
             </span>
-          ) : (
-            <div className="absolute inset-x-0 bottom-0 bg-stone-900/95 px-5 py-4 text-sm font-medium uppercase tracking-normal text-white transition duration-200 md:translate-y-full md:group-hover:translate-y-0 md:group-focus-visible:translate-y-0">
-              <AddToCartButton
-                product={product}
-                className="inline-flex w-full items-center justify-between text-left text-sm font-medium uppercase tracking-normal text-white"
-              />
-            </div>
           )}
+          {!isOutOfStock ? (
+            <div className="absolute inset-x-0 bottom-0 translate-y-full bg-stone-900/95 p-4 transition duration-300 ease-out group-hover:translate-y-0 group-focus-within:translate-y-0">
+              <span className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.08em] text-white">
+                Order Now
+                <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-1" />
+              </span>
+            </div>
+          ) : null}
         </div>
       </Link>
-      <div className="pt-5">
-        <div className="flex items-start justify-between gap-4">
-          <h2 className="font-serif text-2xl font-normal leading-tight text-stone-900 transition duration-150 group-hover:text-brand">
-            <span>{product.name.split(" ")[0]}</span>{" "}
-            <span className="italic">{product.name.split(" ").slice(1).join(" ")}</span>
+
+      <div className="space-y-2 pt-4">
+        {product.category ? (
+          <p className="text-[0.625rem] font-medium uppercase leading-3 tracking-[0.12em] text-stone-400">
+            {product.category.name}
+          </p>
+        ) : null}
+        <Link href={`/products/${product.slug}`} className="block">
+          <h2 className="font-serif text-xl font-normal leading-tight text-stone-900 transition group-hover:text-brand">
+            {product.name}
           </h2>
-          <p className="shrink-0 pt-1 text-sm font-medium text-brand">
+          <span className="mt-2 block h-0.5 w-0 bg-brand transition-all duration-300 group-hover:w-12" />
+        </Link>
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <p className="text-sm font-medium text-brand">
             {formatPaise(product.pricePaise)}
           </p>
+          {hasCustomerDiscount ? (
+            <p className="text-xs font-medium text-stone-400 line-through">
+              {formatPaise(product.basePricePaise)}
+            </p>
+          ) : null}
         </div>
-        <div className="mt-3 h-0.5 w-0 bg-brand transition-all duration-300 group-hover:w-16" />
-        <p className="mt-4 line-clamp-2 text-sm font-light leading-7 text-stone-600">
-          {product.shortDescription}
-        </p>
-        <p className="mt-4 text-[0.6875rem] font-medium uppercase tracking-normal text-stone-400">
-          {metadata}
-        </p>
-        <p className="mt-1 text-[0.6875rem] font-medium uppercase tracking-normal text-stone-400">
-          {product.minPhotos}-{product.maxPhotos} photos
+
+        <p className="text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-stone-400">
+          {`Custom - Printed - Ships in ${product.productionDays} days - ${product.minPhotos}-${product.maxPhotos} photos`}
         </p>
       </div>
     </article>

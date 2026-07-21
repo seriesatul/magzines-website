@@ -194,7 +194,7 @@ export default async function NewProductPage(): Promise<React.JSX.Element> {
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
             <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
-              Base price
+              Selling price
               <input
                 required
                 type="number"
@@ -206,7 +206,7 @@ export default async function NewProductPage(): Promise<React.JSX.Element> {
               />
             </label>
             <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
-              Sale price
+              Customer price
               <input
                 type="number"
                 step="0.01"

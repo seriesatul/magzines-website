@@ -41,7 +41,7 @@ export default async function AdminDashboardPage(): Promise<React.JSX.Element> {
   const statusCountsRaw = await db.order.groupBy({
     by: ["status"],
     where: {
-      status: { in: ["PENDING", "DESIGNING", "PRINTING", "SHIPPED"] }
+      status: { in: ["PENDING", "DESIGNING", "PRINTING", "SHIPPED", "DELIVERED"] }
     },
     _count: { _all: true }
   });
@@ -80,9 +80,8 @@ export default async function AdminDashboardPage(): Promise<React.JSX.Element> {
   const monthlyRevenuePaise = revenueSince(startOfMonth);
   const yearlyRevenuePaise = revenueSince(startOfYear);
   const pendingCount = statusCount("PENDING");
-  const designingCount = statusCount("DESIGNING");
-  const printingCount = statusCount("PRINTING");
-  const shippedCount = statusCount("SHIPPED");
+  const inProgressCount = statusCount("DESIGNING") + statusCount("PRINTING");
+  const shippedCount = statusCount("SHIPPED") + statusCount("DELIVERED");
 
   const revenueCards = [
     {
@@ -152,8 +151,8 @@ export default async function AdminDashboardPage(): Promise<React.JSX.Element> {
         </div>
         <div className="border border-stone-200 bg-white p-5">
           <p className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Active Pipeline</p>
-          <p className="mt-2 font-mono text-2xl font-black text-stone-900">{pendingCount + designingCount + printingCount}</p>
-          <p className="mt-1 text-[10px] text-stone-400">{designingCount} designing / {printingCount} in press / {shippedCount} shipped</p>
+          <p className="mt-2 font-mono text-2xl font-black text-stone-900">{pendingCount + inProgressCount}</p>
+          <p className="mt-1 text-[10px] text-stone-400">{pendingCount} placed / {inProgressCount} in progress / {shippedCount} shipped</p>
         </div>
         <div className="border border-stone-200 bg-white p-5">
           <p className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Abandoned Carts</p>
@@ -213,7 +212,7 @@ export default async function AdminDashboardPage(): Promise<React.JSX.Element> {
                         </span>
                       </td>
                       <td className="py-4">
-                        <span className="font-semibold text-stone-900">{order.status}</span>
+                        <span className="font-semibold text-stone-900">{formatDashboardOrderStatus(order.status)}</span>
                       </td>
                     </tr>
                   ))}
@@ -298,4 +297,20 @@ export default async function AdminDashboardPage(): Promise<React.JSX.Element> {
       </div>
     );
   }
+}
+
+function formatDashboardOrderStatus(status: string): string {
+  if (status === "PENDING") {
+    return "Order placed";
+  }
+
+  if (status === "DESIGNING" || status === "PRINTING") {
+    return "Order in progress";
+  }
+
+  if (status === "SHIPPED" || status === "DELIVERED") {
+    return "Order shipped";
+  }
+
+  return "Cancelled";
 }

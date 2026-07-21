@@ -20,11 +20,16 @@ export function AddToCartButton({
 
     addItem({
       id: product.id,
+      productId: product.id,
       slug: product.slug,
       name: product.name,
       pricePaise: product.pricePaise,
       imageUrl: product.imageUrl,
-      imageAlt: product.imageAlt
+      imageAlt: product.imageAlt,
+      uploadLaterOnWhatsApp: true,
+      photos: [],
+      photosCount: 0,
+      layoutMetadata: []
     });
   }
 

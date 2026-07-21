@@ -11,6 +11,7 @@ export const logger: Logger = pino({
       "DATABASE_URL",
       "DIRECT_URL",
       "AUTH_SECRET",
+      "AUTH_GOOGLE_SECRET",
       "UPSTASH_REDIS_REST_TOKEN",
       "RAZORPAY_KEY_SECRET",
       "RAZORPAY_WEBHOOK_SECRET",

@@ -1,13 +1,42 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { PaymentType } from "@prisma/client";
+import { PaymentType, Prisma } from "@prisma/client";
 import { db } from "@/server/db/client";
-import { env } from "@/config/env";
 import { logger } from "@/server/logger/logger";
+import { getCheckoutSettings, isPaymentTypeEnabled } from "@/lib/checkout-settings";
 import { createRazorpayOrder } from "@/server/payments/razorpay";
 import { sendWhatsAppTemplate } from "@/server/services/whatsapp";
+import { getStringSetting } from "@/server/services/settings";
 
 // Strict input validation matching Indian pincode, phone, and customizations (Rule 10)
+const checkoutPhotoSchema = z.object({
+  key: z.string().optional().default(""),
+  url: z.string().url(),
+  name: z.string().optional(),
+  size: z.number().int().nonnegative().optional(),
+  mimeType: z.string().trim().optional(),
+  slot: z.number().int().positive().optional()
+});
+
+const checkoutLayoutPageSchema = z.object({
+  pageNumber: z.number().int().positive(),
+  layoutType: z.enum([
+    "FULL_BLEED_1_PHOTO",
+    "GRID_3_PHOTO_BOTTOM_TEXT",
+    "GRID_5_PHOTO_DOUBLE_TEXT"
+  ]),
+  texts: z.record(z.string(), z.string()),
+  photos: z.array(
+    z.object({
+      slot: z.number().int().positive(),
+      key: z.string().optional(),
+      url: z.string().url(),
+      name: z.string().optional(),
+      size: z.number().int().nonnegative().optional()
+    })
+  )
+});
+
 const checkoutItemSchema = z.object({
   id: z.string().min(1),
   slug: z.string().min(1),
@@ -16,7 +45,9 @@ const checkoutItemSchema = z.object({
   quantity: z.number().int().positive(),
   customMessage: z.string().optional().nullable(),
   uploadLaterOnWhatsApp: z.boolean().optional().default(false),
-  photosCount: z.number().int().nonnegative().optional().default(0)
+  photosCount: z.number().int().nonnegative().optional().default(0),
+  photos: z.array(checkoutPhotoSchema).optional().default([]),
+  layoutMetadata: z.array(checkoutLayoutPageSchema).optional().default([])
 });
 
 const checkoutSchema = z.object({
@@ -72,6 +103,30 @@ export async function POST(request: Request): Promise<NextResponse> {
           { status: 400 }
         );
       }
+
+      const layoutPhotoCount = item.layoutMetadata.reduce(
+        (sum, page) => sum + page.photos.length,
+        0
+      );
+      const providedPhotoCount = Math.max(
+        item.photosCount,
+        item.photos.length,
+        layoutPhotoCount
+      );
+
+      if (providedPhotoCount > product.maxPhotos) {
+        return NextResponse.json(
+          { error: `${product.name} accepts at most ${product.maxPhotos} photos.` },
+          { status: 400 }
+        );
+      }
+
+      if (!item.uploadLaterOnWhatsApp && providedPhotoCount < product.minPhotos) {
+        return NextResponse.json(
+          { error: `${product.name} needs at least ${product.minPhotos} assigned photos.` },
+          { status: 400 }
+        );
+      }
     }
 
     // 2. Subtotal calculations using exact integer paise (Rule 2)
@@ -79,15 +134,24 @@ export async function POST(request: Request): Promise<NextResponse> {
       (sum, item) => sum + item.pricePaise * item.quantity,
       0
     );
+    const checkoutSettings = await getCheckoutSettings();
+
+    if (!isPaymentTypeEnabled(payload.paymentType, subtotalPaise, checkoutSettings)) {
+      return NextResponse.json(
+        { error: "The selected payment method is not available for this order." },
+        { status: 400 }
+      );
+    }
 
     // 3. Dynamic Shipping Fee Calculation (Rule 3.2)
     const shippingFeePaise =
-      subtotalPaise >= env.FREE_SHIPPING_THRESHOLD_PAISE
+      subtotalPaise >= checkoutSettings.freeShippingThresholdPaise
         ? 0
-        : env.DEFAULT_SHIPPING_FEE_PAISE;
+        : checkoutSettings.defaultShippingFeePaise;
 
     // 4. COD fee adjustments
-    const codFeePaise = payload.paymentType === "PARTIAL_COD" ? env.PARTIAL_COD_FEE_PAISE : 0;
+    const codFeePaise =
+      payload.paymentType === "PARTIAL_COD" ? checkoutSettings.partialCodFeePaise : 0;
     const discountPaise = 0; // Handled in coupon verification step
     
     const totalPaise = subtotalPaise + shippingFeePaise + codFeePaise - discountPaise;
@@ -103,8 +167,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       payableNowPaise = 0;
       payableOnDeliveryPaise = totalPaise;
     } else if (payload.paymentType === "PARTIAL_COD") {
-      payableNowPaise = env.PARTIAL_COD_ADVANCE_PAISE;
-      payableOnDeliveryPaise = totalPaise - env.PARTIAL_COD_ADVANCE_PAISE;
+      payableNowPaise = Math.min(checkoutSettings.partialCodAdvancePaise, totalPaise);
+      payableOnDeliveryPaise = totalPaise - payableNowPaise;
     }
 
     // 6. Generate highly unique editorial-style order numbers
@@ -117,6 +181,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const maxProductionDays = products.reduce((max, p) => Math.max(max, p.productionDays), 3);
     const estimatedDeliveryAt = new Date();
     estimatedDeliveryAt.setDate(estimatedDeliveryAt.getDate() + maxProductionDays + 4);
+    const uploadPhotosLater = payload.items.some((item) => item.uploadLaterOnWhatsApp);
 
     const address = await db.address.create({
       data: {
@@ -156,6 +221,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           payableNowPaise,
           payableOnDeliveryPaise,
           customerNote: payload.notes || null,
+          uploadPhotosLater,
           estimatedDeliveryAt,
           addressId: address.id
         }
@@ -169,9 +235,38 @@ export async function POST(request: Request): Promise<NextResponse> {
           productSlug: item.slug,
           quantity: item.quantity,
           unitPricePaise: item.pricePaise,
-          totalPricePaise: item.pricePaise * item.quantity
+          totalPricePaise: item.pricePaise * item.quantity,
+          customMessage: item.customMessage || null,
+          layoutMetadata:
+            item.layoutMetadata.length > 0
+              ? (item.layoutMetadata as Prisma.InputJsonValue)
+              : Prisma.JsonNull
         }))
       });
+
+      const uploadedPhotos = Array.from(
+        new Map(
+          payload.items
+            .flatMap((item) => item.photos)
+            .filter((photo) => photo.key && photo.url)
+            .map((photo) => [photo.key, photo] as const)
+        ).values()
+      );
+
+      if (uploadedPhotos.length > 0) {
+        await tx.photoUpload.createMany({
+          data: uploadedPhotos.map((photo) => ({
+            orderId: createdOrder.id,
+            originalName: photo.name || "client-photo",
+            objectKey: photo.key,
+            publicUrl: photo.url,
+            mimeType: photo.mimeType || "image/jpeg",
+            sizeBytes: photo.size ?? 0,
+            status: "ATTACHED_TO_ORDER"
+          })),
+          skipDuplicates: true
+        });
+      }
 
       await tx.payment.create({
         data: {
@@ -247,6 +342,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     logger.info({ orderId: order.id, orderNumber, totalPaise }, "Checkout order successfully created");
 
+    const razorpayKeyId = await getStringSetting("razorpayKeyId");
+
     return NextResponse.json(
       {
         success: true,
@@ -255,7 +352,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         totalPaise,
         payableNowPaise,
         razorpayOrderId,
-        razorpayKeyId: env.RAZORPAY_KEY_ID // Send key to trigger client modal safely
+        razorpayKeyId
       },
       { status: 201 }
     );

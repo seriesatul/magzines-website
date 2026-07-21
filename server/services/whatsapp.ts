@@ -1,6 +1,6 @@
-import { env } from "@/config/env";
 import { logger } from "@/server/logger/logger";
 import { type ServiceResult, success, failure } from "@/server/services/result";
+import { getStringSetting } from "@/server/services/settings";
 
 export interface SendWhatsAppTemplateParams {
   phone: string; // Supports dynamic layouts (e.g. "+91 98765-43210", "9876543210")
@@ -43,7 +43,12 @@ export async function sendWhatsAppTemplate({
     }
 
     // Build the official Meta Graph API messaging path
-    const url = `https://graph.facebook.com/v20.0/${env.META_WA_PHONE_NUMBER_ID}/messages`;
+    const [phoneNumberId, accessToken] = await Promise.all([
+      getStringSetting("metaWaPhoneNumberId"),
+      getStringSetting("metaWaAccessToken")
+    ]);
+
+    const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
 
     // Map array of values sequentially into official body parameters format
     const mappedParameters = parameters.map((paramText) => ({
@@ -79,7 +84,7 @@ export async function sendWhatsAppTemplate({
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${env.META_WA_ACCESS_TOKEN}`
+        "Authorization": `Bearer ${accessToken}`
       },
       body: JSON.stringify(payload)
     });

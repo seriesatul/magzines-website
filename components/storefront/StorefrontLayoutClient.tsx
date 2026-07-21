@@ -2,130 +2,167 @@
 
 import React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ShoppingBag } from "lucide-react";
-import { AnnouncementBanner } from "@/components/storefront/AnnouncementBanner";
+import { Facebook, Instagram, Linkedin, MessageCircle, ShoppingBag, User, Youtube } from "lucide-react";
 import { useCart } from "@/components/storefront/CartProvider";
-import { FloatingButtons } from "@/components/storefront/FloatingButtons";
-import { CustomCursor } from "@/components/storefront/CustomCursor";
 import { siteConfig } from "@/config/site";
-import type { StorefrontAnnouncement } from "@/lib/products";
+
+type PublicContactSettings = {
+  supportEmail: string;
+  supportPhone: string;
+  whatsappNumber: string;
+  instagramUrl: string;
+  facebookUrl: string;
+  youtubeUrl: string;
+  xUrl: string;
+  linkedinUrl: string;
+};
 
 type StorefrontLayoutClientProps = Readonly<{
   children: React.ReactNode;
-  announcement: StorefrontAnnouncement | null;
+  contactSettings: PublicContactSettings;
 }>;
 
-// Ensure the function name matches the file name and receives layout props
 export function StorefrontLayoutClient({
   children,
-  announcement
+  contactSettings
 }: StorefrontLayoutClientProps): React.JSX.Element {
   const { itemCount } = useCart();
-  const pathname = usePathname();
-  const isHome = pathname === "/";
+  const socialLinks = [
+    { label: "Instagram", href: contactSettings.instagramUrl, icon: Instagram },
+    { label: "Facebook", href: contactSettings.facebookUrl, icon: Facebook },
+    { label: "YouTube", href: contactSettings.youtubeUrl, icon: Youtube },
+    { label: "LinkedIn", href: contactSettings.linkedinUrl, icon: Linkedin }
+  ].filter((link) => link.href.trim().length > 0);
+  const xUrl = contactSettings.xUrl.trim();
+  const whatsappHref = `https://wa.me/${contactSettings.whatsappNumber.replace(/\D/g, "")}`;
 
   return (
-    <div className="min-h-screen bg-[#FAFAF8] flex flex-col justify-between">
-      
-      {/* 1. Global Announcement Banner */}
-      <AnnouncementBanner announcement={announcement} />
+    <div className="flex min-h-screen flex-col bg-white text-stone-900">
+      <header className="sticky top-0 z-50 border-b border-stone-200 bg-white">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          <Link href="/" className="text-lg font-semibold text-stone-950">
+            {siteConfig.name}
+          </Link>
 
-      {/* 2. Global Sticky Header (Only visible on sub-pages to prevent homepage duplicates) */}
-      {!isHome && (
-        <header className="sticky top-0 z-50 w-full bg-[#FAFAF8]/95 backdrop-blur-md border-b border-stone-200">
-          <div className="mx-auto max-w-[1440px] px-6 md:px-12 h-16 flex items-center justify-between">
-            {/* Brand Logo */}
-            <Link href="/" className="font-serif text-lg font-black tracking-[4px] text-[#0A0A0A]">
-              HEARTS & BEANS®
+          <nav className="hidden items-center gap-6 text-sm font-medium text-stone-600 md:flex">
+            <Link href="/" className="transition hover:text-brand">
+              Home
             </Link>
+            <Link href="/products" className="transition hover:text-brand">
+              Products
+            </Link>
+            <Link href="/orders" className="transition hover:text-brand">
+              Track Order
+            </Link>
+            <Link href="/cart" className="transition hover:text-brand">
+              Cart
+            </Link>
+          </nav>
 
-            {/* Navigation Anchors (Desktop) */}
-            <nav className="hidden md:flex gap-8 text-xs uppercase font-bold tracking-widest text-stone-500">
-              <Link href="/#products" className="hover:text-brand transition duration-150">Collection</Link>
-              <Link href="/#process" className="hover:text-brand transition duration-150">Process</Link>
-              <Link href="/#journal" className="hover:text-brand transition duration-150">Studio Note</Link>
-              <Link href={"/orders" as any} className="hover:text-brand transition duration-150">Track Order</Link>
-            </nav>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/sign-in"
+              className="hidden items-center gap-2 rounded border border-stone-200 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-brand hover:text-brand sm:inline-flex"
+            >
+              <User className="h-4 w-4" aria-hidden="true" />
+              Sign in
+            </Link>
+            <Link
+              href="/cart"
+              className="inline-flex items-center gap-2 rounded border border-stone-200 px-3 py-2 text-sm font-medium text-stone-900 transition hover:border-brand hover:text-brand"
+              aria-label={`Cart with ${itemCount} items`}
+            >
+              <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+              <span>{itemCount}</span>
+            </Link>
+          </div>
+        </div>
+      </header>
 
-            {/* Account & Shopping Cart Actions */}
-            <div className="flex items-center gap-6 text-xs uppercase tracking-wider font-semibold">
-              <Link href="/sign-in" className="hover:text-brand transition duration-150 hidden sm:inline">
-                Sign In
-              </Link>
-              <Link
-                href="/cart"
-                className="relative p-2 flex items-center gap-2 hover:text-brand transition duration-150 border border-stone-200 bg-white"
-              >
-                <ShoppingBag className="h-4 w-4 text-stone-700" />
-                <span className="font-mono text-xs text-stone-900">{itemCount}</span>
-              </Link>
+      <div className="w-full flex-1">{children}</div>
+
+      <footer className="border-t border-stone-200 bg-stone-50">
+        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 text-sm text-stone-600 sm:px-6 md:grid-cols-3 lg:px-8">
+          <div>
+            <p className="text-base font-semibold text-stone-950">{siteConfig.name}</p>
+            <p className="mt-2 max-w-sm leading-6">{siteConfig.description}</p>
+          </div>
+          <div>
+            <p className="font-semibold text-stone-950">Contact</p>
+            <div className="mt-3 space-y-2">
+              <p>
+                <a className="hover:text-brand" href={`mailto:${contactSettings.supportEmail}`}>
+                  {contactSettings.supportEmail}
+                </a>
+              </p>
+              <p>
+                <a className="hover:text-brand" href={`tel:${contactSettings.supportPhone}`}>
+                  {contactSettings.supportPhone}
+                </a>
+              </p>
+              <p>
+                <a className="inline-flex items-center gap-2 hover:text-brand" href={whatsappHref} target="_blank" rel="noreferrer">
+                  <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                  WhatsApp
+                </a>
+              </p>
             </div>
           </div>
-        </header>
-      )}
-
-      {/* 3. Core Page Content Context */}
-      <div className="flex-1 w-full">
-        {children}
-      </div>
-
-      {/* 4. Responsive Editorial Footer */}
-      <footer className="bg-[#0A0A0A] text-[#FAFAF8] border-t border-stone-800">
-        <div className="mx-auto grid max-w-[1440px] gap-10 px-6 py-12 md:px-12 md:py-16 lg:grid-cols-[1.2fr_0.8fr]">
           <div>
-            <p className="max-w-2xl font-serif text-4xl italic leading-tight">
-              Stories made tangible, printed with care.
-            </p>
-            <p className="mt-5 max-w-md text-xs font-light leading-6 text-stone-400">
-              {siteConfig.description}
-            </p>
-          </div>
-          <div className="space-y-3 text-xs font-light text-stone-400 lg:text-right flex flex-col lg:justify-end">
-            <p>
-              <a
-                className="underline decoration-stone-600 underline-offset-4 transition hover:text-[#FAFAF8] hover:decoration-brand"
-                href={`mailto:${siteConfig.supportEmail}`}
-              >
-                {siteConfig.supportEmail}
-              </a>
-            </p>
-            <p>
-              <a
-                className="underline decoration-stone-600 underline-offset-4 transition hover:text-[#FAFAF8] hover:decoration-brand"
-                href={`tel:${siteConfig.supportPhone}`}
-              >
-                {siteConfig.supportPhone}
-              </a>
-            </p>
+            <p className="font-semibold text-stone-950">Links</p>
+            <div className="mt-3 flex flex-col gap-2">
+              <Link href="/privacy" className="hover:text-brand">
+                Privacy Policy
+              </Link>
+              <Link href="/terms" className="hover:text-brand">
+                Terms
+              </Link>
+              <Link href="/shipping" className="hover:text-brand">
+                Shipping
+              </Link>
+              <Link href="/refunds" className="hover:text-brand">
+                Refunds
+              </Link>
+            </div>
+            {socialLinks.length > 0 || xUrl ? (
+              <div className="mt-6 flex items-center gap-3">
+                {socialLinks.map((link) => {
+                  const Icon = link.icon;
+
+                  return (
+                    <a
+                      key={link.label}
+                      href={link.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={link.label}
+                      title={link.label}
+                      className="inline-flex h-9 w-9 items-center justify-center border border-stone-200 text-stone-600 transition hover:border-brand hover:text-brand"
+                    >
+                      <Icon className="h-4 w-4" aria-hidden="true" />
+                    </a>
+                  );
+                })}
+                {xUrl ? (
+                  <a
+                    href={xUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="X"
+                    title="X"
+                    className="inline-flex h-9 w-9 items-center justify-center border border-stone-200 font-sans text-xs font-bold text-stone-600 transition hover:border-brand hover:text-brand"
+                  >
+                    X
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
-        
-        {/* Footnotes copyright Row (Includes Private Admin Portal Link) */}
-        <div className="mx-auto flex max-w-[1440px] items-center justify-between border-t border-stone-900 px-6 py-5 text-[10px] text-stone-500 md:px-12">
-          <div className="flex items-center gap-3">
-            <p>© {new Date().getFullYear()} {siteConfig.name}. All rights reserved.</p>
-            <span className="text-stone-800">|</span>
-            <Link
-              href={"/sign-in?mode=admin" as any}
-              className="hover:text-brand transition duration-150 text-stone-600"
-              title="Protected Admin Access Gateway"
-            >
-              Admin Portal
-            </Link>
-          </div>
-          <a
-            href="#top"
-            className="border border-stone-800 px-4 py-2 text-stone-400 transition hover:border-brand hover:text-brand hover:bg-[#FAFAF8]/5 rounded-none"
-          >
-            Back to Top
-          </a>
+        <div className="border-t border-stone-200 px-4 py-4 text-center text-xs text-stone-500">
+          (c) {new Date().getFullYear()} {siteConfig.name}. All rights reserved.
         </div>
       </footer>
-
-      {/* 5. Sticky Floating Call Actions & Cursor Effects */}
-      <FloatingButtons />
-      <CustomCursor />
     </div>
   );
 }

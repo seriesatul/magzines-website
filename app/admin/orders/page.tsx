@@ -1,21 +1,47 @@
 import React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { db } from "@/server/db/client";
 import { formatPaise } from "@/server/db/money";
-import { PaymentStatus } from "@prisma/client";
-import { Search, ShoppingBag, Eye, ArrowLeft, ArrowRight } from "lucide-react";
+import { OrderStatus, PaymentStatus } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+import { Search, ShoppingBag, Eye, ArrowLeft, ArrowRight, Download } from "lucide-react";
 
 export const revalidate = 0; // Dynamic server component, always fetches fresh data on load
 
 interface OrdersPageProps {
   searchParams: Promise<{
     query?: string;  // Search queries (name, phone, order number)
-    status?: string; // Filter by status (PENDING, DESIGNING, PRINTING, SHIPPED, DELIVERED)
+    status?: string; // Filter by status (PENDING, DESIGNING, SHIPPED)
     page?: string;   // Page offset
   }>;
 }
 
-const STATUS_OPTIONS = ["ALL", "PENDING", "DESIGNING", "PRINTING", "SHIPPED", "DELIVERED"];
+const ORDER_STATUS_OPTIONS = [
+  OrderStatus.PENDING,
+  OrderStatus.DESIGNING,
+  OrderStatus.SHIPPED
+] as const;
+const STATUS_OPTIONS = ["ALL", ...ORDER_STATUS_OPTIONS] as const;
+type ListedOrderStatus = (typeof ORDER_STATUS_OPTIONS)[number];
+
+function isListedOrderStatus(value: string): value is ListedOrderStatus {
+  return ORDER_STATUS_OPTIONS.includes(value as ListedOrderStatus);
+}
+
+function buildOrdersPageHref(page: number, query?: string, status?: string): Route {
+  const params = new URLSearchParams({ page: String(page) });
+
+  if (query) {
+    params.set("query", query);
+  }
+
+  if (status) {
+    params.set("status", status);
+  }
+
+  return `/admin/orders?${params.toString()}` as Route;
+}
 
 export default async function AdminOrdersListPage({
   searchParams
@@ -27,12 +53,18 @@ export default async function AdminOrdersListPage({
   const skip = (currentPage - 1) * limit;
 
   // 1. Build dynamic Prisma search query (Rule 7.3)
-  const where: any = {
+  const where: Prisma.OrderWhereInput = {
     deletedAt: null
   };
 
-  if (status && status !== "ALL") {
-    where.status = status;
+  if (status && isListedOrderStatus(status)) {
+    if (status === OrderStatus.DESIGNING) {
+      where.status = { in: [OrderStatus.DESIGNING, OrderStatus.PRINTING] };
+    } else if (status === OrderStatus.SHIPPED) {
+      where.status = { in: [OrderStatus.SHIPPED, OrderStatus.DELIVERED] };
+    } else {
+      where.status = status;
+    }
   }
 
   if (query) {
@@ -50,7 +82,10 @@ export default async function AdminOrdersListPage({
       orderBy: { createdAt: "desc" },
       skip,
       take: limit,
-      include: { address: true }
+      include: {
+        address: true,
+        _count: { select: { photos: true } }
+      }
     }),
     db.order.count({ where })
   ]);
@@ -110,7 +145,7 @@ export default async function AdminOrdersListPage({
             className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-3 text-xs font-medium outline-none focus:border-brand rounded-none cursor-pointer"
           >
             {STATUS_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
+              <option key={opt} value={opt}>{opt === "ALL" ? "ALL" : formatOrderStatus(opt)}</option>
             ))}
           </select>
         </label>
@@ -144,7 +179,7 @@ export default async function AdminOrdersListPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 text-xs font-light text-stone-600">
-                {orders.map((order: any) => (
+                {orders.map((order) => (
                   <tr key={order.id} className="hover:bg-stone-50/50 transition">
                     <td className="py-4 font-mono font-bold text-stone-950">
                       #{order.orderNumber}
@@ -169,15 +204,26 @@ export default async function AdminOrdersListPage({
                         {order.paymentStatus}
                       </span>
                     </td>
-                    <td className="py-4 font-semibold text-stone-900">{order.status}</td>
+                    <td className="py-4 font-semibold text-stone-900">{formatOrderStatus(order.status)}</td>
                     <td className="py-4 text-right">
-                      <Link
-                        href={`/admin/orders/${order.id}` as any}
-                        className="inline-flex h-9 w-9 items-center justify-center border border-stone-200 hover:border-brand hover:text-brand bg-white transition rounded-none"
-                        title="View Order Details"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </Link>
+                      <div className="inline-flex items-center gap-2">
+                        {order._count.photos > 0 ? (
+                          <a
+                            href={`/api/admin/orders/${order.id}/photos`}
+                            className="inline-flex h-9 w-9 items-center justify-center border border-stone-200 bg-white transition hover:border-brand hover:text-brand rounded-none"
+                            title={`Download ${order._count.photos} original photos`}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </a>
+                        ) : null}
+                        <Link
+                          href={`/admin/orders/${order.id}` as Route}
+                          className="inline-flex h-9 w-9 items-center justify-center border border-stone-200 hover:border-brand hover:text-brand bg-white transition rounded-none"
+                          title="View Order Details"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -193,7 +239,7 @@ export default async function AdminOrdersListPage({
               </span>
               <div className="flex gap-2">
                 <Link
-                  href={`/admin/orders?page=${currentPage - 1}${query ? `&query=${query}` : ""}${status ? `&status=${status}` : ""}` as any}
+                  href={buildOrdersPageHref(currentPage - 1, query, status)}
                   className={`inline-flex h-9 px-4 items-center gap-1 border border-stone-300 text-xs font-bold uppercase tracking-wider rounded-none ${
                     currentPage <= 1 ? "pointer-events-none opacity-40 bg-stone-50" : "bg-white hover:border-brand hover:text-brand transition"
                   }`}
@@ -202,7 +248,7 @@ export default async function AdminOrdersListPage({
                   Prev
                 </Link>
                 <Link
-                  href={`/admin/orders?page=${currentPage + 1}${query ? `&query=${query}` : ""}${status ? `&status=${status}` : ""}` as any}
+                  href={buildOrdersPageHref(currentPage + 1, query, status)}
                   className={`inline-flex h-9 px-4 items-center gap-1 border border-stone-300 text-xs font-bold uppercase tracking-wider rounded-none ${
                     currentPage >= totalPages ? "pointer-events-none opacity-40 bg-stone-50" : "bg-white hover:border-brand hover:text-brand transition"
                   }`}
@@ -217,4 +263,20 @@ export default async function AdminOrdersListPage({
       )}
     </div>
   );
+}
+
+function formatOrderStatus(status: OrderStatus): string {
+  if (status === OrderStatus.PENDING) {
+    return "Order placed";
+  }
+
+  if (status === OrderStatus.DESIGNING || status === OrderStatus.PRINTING) {
+    return "Order in progress";
+  }
+
+  if (status === OrderStatus.SHIPPED || status === OrderStatus.DELIVERED) {
+    return "Order shipped";
+  }
+
+  return "Cancelled";
 }

@@ -1,16 +1,9 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import type { PhotobookCartItem } from "@/types/photobook";
 
-export type CartItem = {
-  id: string;
-  slug: string;
-  name: string;
-  pricePaise: number;
-  imageUrl: string;
-  imageAlt: string;
-  quantity: number;
-};
+export type CartItem = PhotobookCartItem;
 
 type CartContextValue = {
   items: CartItem[];

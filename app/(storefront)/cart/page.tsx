@@ -6,20 +6,7 @@ import Link from "next/link";
 import { Minus, Plus, ShoppingBag, Trash2, Tag, Percent } from "lucide-react";
 import { useCart } from "@/components/storefront/CartProvider";
 import { formatPaise } from "@/server/db/money";
-
-// Extend the project's base CartItem with our custom customization parameters
-interface ExtendedCartItem {
-  id: string;
-  productId: string;
-  name: string;
-  pricePaise: number;
-  imageUrl: string;
-  imageAlt: string;
-  quantity: number;
-  customMessage?: string;
-  uploadLaterOnWhatsApp?: boolean;
-  photosCount?: number;
-}
+import type { PhotobookCartItem } from "@/types/photobook";
 
 // Standard Indian shipping rules in Paise (Rule 2)
 const FREE_SHIPPING_THRESHOLD_PAISE = 99900; // ₹999
@@ -192,7 +179,7 @@ export default function CartPage(): React.JSX.Element {
                 </div>
               </div>
 
-              {(items as unknown as ExtendedCartItem[]).map((item) => (
+              {(items as Array<PhotobookCartItem>).map((item) => (
                 <div key={item.id} className="flex gap-5 border border-stone-200 bg-white p-5 rounded-none">
                   {/* Aspect Product Thumbnail */}
                   <div className="relative h-36 w-28 shrink-0 border border-stone-100 overflow-hidden bg-stone-50">
@@ -217,12 +204,17 @@ export default function CartPage(): React.JSX.Element {
                         {/* Dynamic Custom Metadata labels */}
                         {item.customMessage && (
                           <p className="text-[11px] text-stone-500 font-light mt-3">
-                            <strong>Dedication:</strong> "{item.customMessage}"
+                            <strong>Customization:</strong> "{item.customMessage}"
                           </p>
                         )}
                         <p className="text-[11px] text-stone-500 font-light mt-1">
-                          <strong>Photos:</strong> {item.uploadLaterOnWhatsApp ? "WhatsApp Upload Later" : `${item.photosCount} attached`}
+                          <strong>Photos:</strong> {item.uploadLaterOnWhatsApp ? "WhatsApp upload later" : `${item.photosCount} originals attached`}
                         </p>
+                        {item.layoutMetadata && item.layoutMetadata.length > 0 && (
+                          <p className="text-[11px] text-stone-500 font-light mt-1">
+                            <strong>Blueprint:</strong> {item.layoutMetadata.length} page spreads arranged
+                          </p>
+                        )}
                       </div>
 
                       {/* Line Item Remover */}

@@ -1,187 +1,380 @@
 import React from "react";
 import { revalidatePath } from "next/cache";
+import { Globe2, Mail, MessageCircle, Save, Settings, Truck, Wallet, UploadCloud } from "lucide-react";
+import { env } from "@/config/env";
+import { SettingFieldInput } from "@/components/admin/SettingFieldInput";
 import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
-import { Settings, Save, KeyRound } from "lucide-react";
+import { GLOBAL_SETTING_ID, getResolvedSettings, type DynamicSettingKey } from "@/server/services/settings";
 
 export const revalidate = 0;
 
-const SETTING_DEFINITIONS = [
+const SECRET_MASK = "\u2022".repeat(16);
+
+type SettingInput = {
+  key: DynamicSettingKey;
+  name: string;
+  label: string;
+  kind: "rupees" | "number" | "text" | "url" | "email" | "secret";
+  placeholder?: string;
+};
+
+type SettingSection = {
+  title: string;
+  accent: string;
+  icon: React.ComponentType<{ className?: string }>;
+  fields: SettingInput[];
+};
+
+const SETTINGS_SECTIONS: SettingSection[] = [
   {
-    key: "partial_cod_enabled",
-    label: "Partial COD Enabled",
-    group: "checkout",
-    valueType: "BOOLEAN",
-    defaultValue: "true",
-    description: "Allow customers to pay an advance now and the rest on delivery."
+    title: "Calculations & Shipping Limits",
+    accent: "Checkout economics",
+    icon: Truck,
+    fields: [
+      { key: "freeShippingThresholdPaise", name: "freeShippingThresholdRupees", label: "Free Shipping Threshold", kind: "rupees" },
+      { key: "defaultShippingFeePaise", name: "defaultShippingFeeRupees", label: "Default Shipping Fee", kind: "rupees" },
+      { key: "partialCodAdvancePaise", name: "partialCodAdvanceRupees", label: "Partial COD Advance", kind: "rupees" },
+      { key: "partialCodFeePaise", name: "partialCodFeeRupees", label: "Partial COD Fee", kind: "rupees" },
+      { key: "rateLimitRequestsPerMin", name: "rateLimitRequestsPerMin", label: "Requests Per Minute", kind: "number" }
+    ]
   },
   {
-    key: "partial_cod_min_order_paise",
-    label: "Partial COD Minimum Order",
-    group: "checkout",
-    valueType: "MONEY_PAISE",
-    defaultValue: "99900",
-    description: "Minimum cart value in paise before partial COD is available."
+    title: "Transactional Email Credentials",
+    accent: "Resend delivery",
+    icon: Mail,
+    fields: [
+      { key: "resendApiKey", name: "resendApiKey", label: "Resend API Key", kind: "secret", placeholder: "re_..." },
+      { key: "resendFromEmail", name: "resendFromEmail", label: "From Email", kind: "email", placeholder: "Hearts & Beans <orders@example.com>" }
+    ]
   },
   {
-    key: "partial_cod_advance_percent",
-    label: "Partial COD Advance Percent",
-    group: "checkout",
-    valueType: "NUMBER",
-    defaultValue: "30",
-    description: "Percentage customer pays immediately for partial COD orders."
+    title: "Public Contact & Social Links",
+    accent: "Storefront footer",
+    icon: Globe2,
+    fields: [
+      { key: "supportEmail", name: "supportEmail", label: "Support Email", kind: "email", placeholder: "hello@example.com" },
+      { key: "supportPhone", name: "supportPhone", label: "Support Phone", kind: "text", placeholder: "+919999999999" },
+      { key: "whatsappNumber", name: "whatsappNumber", label: "WhatsApp Number", kind: "text", placeholder: "+919999999999" },
+      { key: "instagramUrl", name: "instagramUrl", label: "Instagram URL", kind: "url", placeholder: "https://instagram.com/..." },
+      { key: "facebookUrl", name: "facebookUrl", label: "Facebook URL", kind: "url", placeholder: "https://facebook.com/..." },
+      { key: "youtubeUrl", name: "youtubeUrl", label: "YouTube URL", kind: "url", placeholder: "https://youtube.com/..." },
+      { key: "xUrl", name: "xUrl", label: "X URL", kind: "url", placeholder: "https://x.com/..." },
+      { key: "linkedinUrl", name: "linkedinUrl", label: "LinkedIn URL", kind: "url", placeholder: "https://linkedin.com/company/..." }
+    ]
   },
   {
-    key: "free_shipping_threshold_paise",
-    label: "Free Shipping Threshold",
-    group: "checkout",
-    valueType: "MONEY_PAISE",
-    defaultValue: "149900",
-    description: "Order value in paise where shipping becomes free."
+    title: "Cloudflare Storage Credentials",
+    accent: "Media storage",
+    icon: UploadCloud,
+    fields: [
+      { key: "cloudflareR2AccountId", name: "cloudflareR2AccountId", label: "R2 Account ID", kind: "secret" },
+      { key: "cloudflareR2AccessKeyId", name: "cloudflareR2AccessKeyId", label: "R2 Access Key ID", kind: "secret" },
+      { key: "cloudflareR2SecretAccessKey", name: "cloudflareR2SecretAccessKey", label: "R2 Secret Access Key", kind: "secret" },
+      { key: "cloudflareR2BucketName", name: "cloudflareR2BucketName", label: "Bucket Name", kind: "text" },
+      { key: "cloudflareR2PublicBaseUrl", name: "cloudflareR2PublicBaseUrl", label: "Public Base URL", kind: "url" }
+    ]
   },
   {
-    key: "instagram_url",
-    label: "Instagram URL",
-    group: "social",
-    valueType: "URL",
-    defaultValue: "",
-    description: "Public Instagram profile shown in footer and contact areas."
+    title: "Razorpay Payment Gateway",
+    accent: "Payment keys",
+    icon: Wallet,
+    fields: [
+      { key: "razorpayKeyId", name: "razorpayKeyId", label: "Razorpay Key ID", kind: "secret", placeholder: "rzp_test_..." },
+      { key: "razorpayKeySecret", name: "razorpayKeySecret", label: "Razorpay Key Secret", kind: "secret" }
+    ]
   },
   {
-    key: "whatsapp_url",
-    label: "WhatsApp URL",
-    group: "social",
-    valueType: "URL",
-    defaultValue: "",
-    description: "Customer support WhatsApp deep link."
-  },
-  {
-    key: "razorpay_key_id",
-    label: "Razorpay Key ID",
-    group: "secrets",
-    valueType: "SECRET",
-    defaultValue: "",
-    description: "Operational reference for payment gateway credentials.",
-    isSecret: true
-  },
-  {
-    key: "r2_public_base_url",
-    label: "R2 Public Base URL",
-    group: "secrets",
-    valueType: "SECRET",
-    defaultValue: "",
-    description: "Public asset base URL for uploaded media.",
-    isSecret: true
+    title: "WhatsApp Messaging Credentials",
+    accent: "Meta Cloud API",
+    icon: MessageCircle,
+    fields: [
+      { key: "metaWaAccessToken", name: "metaWaAccessToken", label: "Access Token", kind: "secret" },
+      { key: "metaWaPhoneNumberId", name: "metaWaPhoneNumberId", label: "Phone Number ID", kind: "text" }
+    ]
   }
 ];
 
-export default async function AdminSettingsPage(): Promise<React.JSX.Element> {
-  const settings = await db.siteSetting.findMany({
-    orderBy: [{ group: "asc" }, { label: "asc" }]
-  });
+const STRING_SETTING_KEYS = [
+  "razorpayKeyId",
+  "razorpayKeySecret",
+  "resendApiKey",
+  "resendFromEmail",
+  "supportEmail",
+  "supportPhone",
+  "whatsappNumber",
+  "instagramUrl",
+  "facebookUrl",
+  "youtubeUrl",
+  "xUrl",
+  "linkedinUrl",
+  "cloudflareR2AccountId",
+  "cloudflareR2AccessKeyId",
+  "cloudflareR2SecretAccessKey",
+  "cloudflareR2BucketName",
+  "cloudflareR2PublicBaseUrl",
+  "metaWaAccessToken",
+  "metaWaPhoneNumberId"
+] as const;
 
-  const settingMap = new Map(settings.map((setting) => [setting.key, setting]));
+type StringSettingKey = (typeof STRING_SETTING_KEYS)[number];
+type SettingRow = Awaited<ReturnType<typeof getSettingRow>>;
+
+export default async function AdminSettingsPage(): Promise<React.JSX.Element> {
+  const [settingRow, resolvedSettings] = await Promise.all([
+    getSettingRow(),
+    getResolvedSettings()
+  ]);
 
   async function saveSettings(formData: FormData) {
     "use server";
 
     try {
-      await Promise.all(
-        SETTING_DEFINITIONS.map((definition) => {
-          const submittedValue = String(formData.get(definition.key) ?? definition.defaultValue);
+      const current = await getSettingRow();
+      const stringSettings = Object.fromEntries(
+        STRING_SETTING_KEYS.map((key) => {
+          const field = findSettingField(key);
+          const value = field?.kind === "secret"
+            ? resolveSecretValue(formData, field.name, current?.[key] ?? null)
+            : resolveNullableString(formData, field?.name ?? key);
 
-          return db.siteSetting.upsert({
-            where: { key: definition.key },
-            update: {
-              label: definition.label,
-              value: submittedValue,
-              valueType: definition.valueType,
-              group: definition.group,
-              isSecret: Boolean(definition.isSecret),
-              description: definition.description
-            },
-            create: {
-              key: definition.key,
-              label: definition.label,
-              value: submittedValue,
-              valueType: definition.valueType,
-              group: definition.group,
-              isSecret: Boolean(definition.isSecret),
-              description: definition.description
-            }
-          });
+          return [key, value];
         })
-      );
+      ) as Record<StringSettingKey, string | null>;
+
+      await db.setting.upsert({
+        where: { id: GLOBAL_SETTING_ID },
+        update: {
+          freeShippingThresholdPaise: parseRupeesToPaise(formData, "freeShippingThresholdRupees"),
+          defaultShippingFeePaise: parseRupeesToPaise(formData, "defaultShippingFeeRupees"),
+          partialCodAdvancePaise: parseRupeesToPaise(formData, "partialCodAdvanceRupees"),
+          partialCodFeePaise: parseRupeesToPaise(formData, "partialCodFeeRupees"),
+          rateLimitRequestsPerMin: parsePositiveInteger(formData, "rateLimitRequestsPerMin"),
+          ...stringSettings
+        },
+        create: {
+          id: GLOBAL_SETTING_ID,
+          freeShippingThresholdPaise: parseRupeesToPaise(formData, "freeShippingThresholdRupees"),
+          defaultShippingFeePaise: parseRupeesToPaise(formData, "defaultShippingFeeRupees"),
+          partialCodAdvancePaise: parseRupeesToPaise(formData, "partialCodAdvanceRupees"),
+          partialCodFeePaise: parseRupeesToPaise(formData, "partialCodFeeRupees"),
+          rateLimitRequestsPerMin: parsePositiveInteger(formData, "rateLimitRequestsPerMin"),
+          ...stringSettings
+        }
+      });
 
       revalidatePath("/admin/settings");
+      revalidatePath("/checkout");
+      revalidatePath("/cart");
+      revalidatePath("/", "layout");
     } catch (error) {
-      logger.error({ error }, "Admin settings save failed");
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        "Secure settings save failed"
+      );
     }
   }
 
   return (
     <div className="space-y-10">
-      <div className="border-b border-stone-200 pb-6">
-        <div className="mb-3 flex items-center gap-2 text-brand">
+      <div className="border-b border-stone-200 pb-8">
+        <div className="mb-4 flex items-center gap-3 text-brand">
           <Settings className="h-4 w-4" />
-          <span className="text-xs font-bold uppercase tracking-wider">Global Settings</span>
+          <span className="text-[0.7rem] font-medium uppercase tracking-[0.12em]">
+            Operations Console
+          </span>
         </div>
-        <h1 className="font-serif text-3xl font-black leading-none tracking-tight text-stone-900">
-          Configure <span className="font-normal italic text-stone-700">Store Operations</span>
+        <h1 className="font-serif text-4xl font-black leading-[0.95] tracking-tight text-stone-900 md:text-5xl">
+          Secure <span className="font-normal italic">Store Settings</span>
         </h1>
-        <p className="mt-3 max-w-[65ch] text-xs font-light leading-6 text-stone-500">
-          Control checkout thresholds, partial COD behavior, social links, and operational references from one place.
-        </p>
       </div>
 
       <form action={saveSettings} className="space-y-8">
-        {["checkout", "social", "secrets"].map((group) => (
-          <section key={group} className="border border-stone-200 bg-white p-6 md:p-8">
-            <div className="mb-6 flex items-center justify-between border-b border-stone-100 pb-4">
-              <h2 className="font-serif text-2xl font-black capitalize text-stone-900">
-                {group} <span className="font-normal italic text-stone-700">settings</span>
-              </h2>
-              {group === "secrets" ? <KeyRound className="h-4 w-4 text-brand" /> : null}
-            </div>
+        {SETTINGS_SECTIONS.map((section) => {
+          const Icon = section.icon;
 
-            <div className="grid gap-5 md:grid-cols-2">
-              {SETTING_DEFINITIONS.filter((definition) => definition.group === group).map((definition) => {
-                const current = settingMap.get(definition.key);
-                const value = current?.value ?? definition.defaultValue;
+          return (
+            <section key={section.title} className="border border-stone-200 bg-white p-6 md:p-8">
+              <div className="mb-7 flex items-start justify-between gap-6 border-b border-stone-200 pb-5">
+                <div>
+                  <div className="mb-2 flex items-center gap-3 text-brand">
+                    <span className="h-px w-6 bg-brand" />
+                    <span className="text-[0.68rem] font-medium uppercase tracking-[0.12em]">
+                      {section.accent}
+                    </span>
+                  </div>
+                  <h2 className="font-serif text-2xl font-bold leading-none text-stone-900 md:text-3xl">
+                    {section.title.split(" ")[0]}{" "}
+                    <span className="font-normal italic">
+                      {section.title.split(" ").slice(1).join(" ")}
+                    </span>
+                  </h2>
+                </div>
+                <Icon className="mt-1 h-5 w-5 shrink-0 text-stone-900" />
+              </div>
 
-                return (
-                  <label key={definition.key} className="block border border-stone-200 bg-[#FAFAF8] p-4">
-                    <span className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                      {definition.label}
+              <div className="grid gap-5 md:grid-cols-2">
+                {section.fields.map((field) => (
+                  <label key={field.name} className="block border border-stone-200 bg-stone-50 p-4">
+                    <span className="flex items-center justify-between gap-4">
+                      <span className="text-[0.68rem] font-medium uppercase tracking-[0.12em] text-stone-600">
+                        {field.label}
+                      </span>
+                      <span className="text-[0.68rem] font-medium uppercase tracking-[0.1em] text-brand">
+                        {getSourceLabel(field.key, settingRow)}
+                      </span>
                     </span>
-                    <span className="mt-1 block min-h-9 text-xs leading-5 text-stone-500">
-                      {definition.description}
-                    </span>
-                    {definition.valueType === "BOOLEAN" ? (
-                      <select name={definition.key} defaultValue={value} className="mt-3 h-10 w-full border border-stone-200 bg-white px-3 text-xs outline-none focus:border-brand">
-                        <option value="true">Enabled</option>
-                        <option value="false">Disabled</option>
-                      </select>
-                    ) : (
-                      <input
-                        name={definition.key}
-                        defaultValue={value}
-                        type={definition.valueType === "SECRET" ? "password" : definition.valueType === "URL" ? "url" : "text"}
-                        className="mt-3 h-10 w-full border border-stone-200 bg-white px-3 text-xs outline-none focus:border-brand"
-                      />
-                    )}
+                    <SettingFieldInput
+                      name={field.name}
+                      defaultValue={getInputDefaultValue(field, settingRow, resolvedSettings)}
+                      placeholder={field.placeholder}
+                      kind={field.kind}
+                    />
                   </label>
-                );
-              })}
-            </div>
-          </section>
-        ))}
+                ))}
+              </div>
+            </section>
+          );
+        })}
 
-        <button className="inline-flex h-11 items-center gap-2 bg-stone-900 px-7 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand">
-          <Save className="h-3.5 w-3.5" />
+        <button className="inline-flex h-12 items-center gap-2 bg-stone-900 px-8 text-xs font-medium uppercase tracking-[0.12em] text-white transition hover:bg-brand">
+          <Save className="h-4 w-4" />
           Save Settings
         </button>
       </form>
     </div>
   );
+}
+
+async function getSettingRow() {
+  return db.setting.findUnique({
+    where: { id: GLOBAL_SETTING_ID }
+  });
+}
+
+function findSettingField(key: DynamicSettingKey): SettingInput | undefined {
+  return SETTINGS_SECTIONS.flatMap((section) => section.fields).find((field) => field.key === key);
+}
+
+function getInputDefaultValue(
+  field: SettingInput,
+  row: SettingRow,
+  resolvedSettings: Record<DynamicSettingKey, string | number>
+): string {
+  const rowValue = row?.[field.key];
+
+  if (field.kind === "secret") {
+    if (hasValue(rowValue)) {
+      return String(rowValue);
+    }
+
+    return hasValue(resolvedSettings[field.key]) ? SECRET_MASK : "";
+  }
+
+  const value = hasValue(rowValue) ? rowValue : resolvedSettings[field.key];
+
+  if (field.kind === "rupees") {
+    return formatPaiseAsRupees(Number(value));
+  }
+
+  return String(value ?? "");
+}
+
+function getSourceLabel(key: DynamicSettingKey, row: SettingRow): string {
+  const databaseValue = row?.[key];
+
+  if (hasValue(databaseValue)) {
+    return "Database";
+  }
+
+  if (hasEnvFallback(key)) {
+    return "ENV";
+  }
+
+  return "Empty";
+}
+
+function hasEnvFallback(key: DynamicSettingKey): boolean {
+  const fallbackMap: Record<DynamicSettingKey, string | number> = {
+    freeShippingThresholdPaise: env.FREE_SHIPPING_THRESHOLD_PAISE,
+    defaultShippingFeePaise: env.DEFAULT_SHIPPING_FEE_PAISE,
+    partialCodAdvancePaise: env.PARTIAL_COD_ADVANCE_PAISE,
+    partialCodFeePaise: env.PARTIAL_COD_FEE_PAISE,
+    rateLimitRequestsPerMin: env.RATE_LIMIT_REQUESTS_PER_MINUTE,
+    razorpayKeyId: env.RAZORPAY_KEY_ID,
+    razorpayKeySecret: env.RAZORPAY_KEY_SECRET,
+    resendApiKey: env.RESEND_API_KEY,
+    resendFromEmail: env.RESEND_FROM_EMAIL,
+    supportEmail: env.NEXT_PUBLIC_SUPPORT_EMAIL,
+    supportPhone: env.NEXT_PUBLIC_SUPPORT_PHONE,
+    whatsappNumber: env.NEXT_PUBLIC_WHATSAPP_NUMBER,
+    instagramUrl: env.NEXT_PUBLIC_INSTAGRAM_URL,
+    facebookUrl: "",
+    youtubeUrl: "",
+    xUrl: "",
+    linkedinUrl: "",
+    cloudflareR2AccountId: env.CLOUDFLARE_R2_ACCOUNT_ID,
+    cloudflareR2AccessKeyId: env.CLOUDFLARE_R2_ACCESS_KEY_ID,
+    cloudflareR2SecretAccessKey: env.CLOUDFLARE_R2_SECRET_ACCESS_KEY,
+    cloudflareR2BucketName: env.CLOUDFLARE_R2_BUCKET_NAME,
+    cloudflareR2PublicBaseUrl: env.CLOUDFLARE_R2_PUBLIC_BASE_URL,
+    metaWaAccessToken: env.META_WA_ACCESS_TOKEN,
+    metaWaPhoneNumberId: env.META_WA_PHONE_NUMBER_ID
+  };
+
+  return hasValue(fallbackMap[key]);
+}
+
+function hasValue(value: unknown): boolean {
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function parseRupeesToPaise(formData: FormData, name: string): number {
+  const rawValue = String(formData.get(name) ?? "").trim();
+
+  if (!/^\d+(\.\d{1,2})?$/.test(rawValue)) {
+    throw new Error(`${name} must be a positive rupee amount.`);
+  }
+
+  return Math.round(Number(rawValue) * 100);
+}
+
+function parsePositiveInteger(formData: FormData, name: string): number {
+  const rawValue = String(formData.get(name) ?? "").trim();
+
+  if (!/^\d+$/.test(rawValue)) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+
+  const value = Number.parseInt(rawValue, 10);
+
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${name} must be greater than zero.`);
+  }
+
+  return value;
+}
+
+function resolveSecretValue(formData: FormData, name: string, currentValue: string | null): string | null {
+  const submittedValue = String(formData.get(name) ?? "").trim();
+
+  if (submittedValue.length === 0 || submittedValue === SECRET_MASK) {
+    return currentValue?.trim() || null;
+  }
+
+  return submittedValue;
+}
+
+function resolveNullableString(formData: FormData, name: string): string | null {
+  const submittedValue = String(formData.get(name) ?? "").trim();
+  return submittedValue.length > 0 ? submittedValue : null;
+}
+
+function formatPaiseAsRupees(paise: number): string {
+  const rupees = paise / 100;
+  return Number.isInteger(rupees) ? String(rupees) : rupees.toFixed(2);
 }

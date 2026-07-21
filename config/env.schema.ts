@@ -65,6 +65,8 @@ export const serverEnvSchema = publicEnvSchema.extend({
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 characters."),
   AUTH_URL: z.string().url(),
   AUTH_TRUST_HOST: booleanStringSchema,
+  AUTH_GOOGLE_ID: z.string().min(1),
+  AUTH_GOOGLE_SECRET: z.string().min(1),
   ADMIN_EMAILS: adminEmailsSchema,
   UPSTASH_REDIS_REST_URL: z.string().url(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1),

@@ -4,260 +4,314 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { Mail, ArrowRight, ShoppingBag, ShieldCheck, Lock } from "lucide-react";
+import { ArrowRight, KeyRound, Lock, Mail, ShieldCheck, ShoppingBag } from "lucide-react";
+
+type LoginMode = "customer" | "admin";
+
+const PASSWORD_PLACEHOLDER = "\u2022".repeat(8);
 
 export default function SignInPage(): React.JSX.Element {
   const router = useRouter();
-  
-  // Toggle state between passwordless customers and credentialed administrators
-  const [loginMode, setLoginMode] = useState<"customer" | "admin">("customer");
-  
+
+  const [loginMode, setLoginMode] = useState<LoginMode>("customer");
+  const [callbackUrl, setCallbackUrl] = useState("/account");
   const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
-  const [adminCallbackUrl, setAdminCallbackUrl] = useState("/admin");
+  const [isOtpSent, setIsOtpSent] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSent, setIsSent] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const requestedMode = params.get("mode");
-    const callbackUrl = params.get("callbackUrl");
+    const requestedCallbackUrl = params.get("callbackUrl");
+    const safeCallbackUrl = requestedCallbackUrl?.startsWith("/")
+      ? requestedCallbackUrl
+      : "/account";
 
-    if (requestedMode === "admin" || callbackUrl?.startsWith("/admin")) {
+    setCallbackUrl(safeCallbackUrl);
+
+    if (requestedMode === "admin" || safeCallbackUrl.startsWith("/admin")) {
       setLoginMode("admin");
-    }
-
-    if (callbackUrl?.startsWith("/admin")) {
-      setAdminCallbackUrl(callbackUrl);
+      setCallbackUrl(safeCallbackUrl.startsWith("/admin") ? safeCallbackUrl : "/admin");
     }
   }, []);
 
-  // 1. Passwordless Customer Magic-Link Handler
-  const handleCustomerSignIn = async (cleanEmail: string) => {
-    try {
-      const result = await signIn("resend", {
-        email: cleanEmail,
-        callbackUrl: "/account",
-        redirect: false
-      });
-
-      if (result?.error) {
-        throw new Error(result.error);
-      }
-
-      setIsSent(true);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "We were unable to send your magic link. Please check your credentials and try again."
-      );
-    }
-  };
-
-  // 2. Secured Admin Password Credentials Handler
-  const handleAdminSignIn = async (cleanEmail: string) => {
-    if (!password.trim()) {
-      setError("Please enter your administrator password.");
-      setIsSubmitting(false);
-      return;
-    }
-
-    try {
-      const result = await signIn("credentials", {
-        email: cleanEmail,
-        password: password.trim(),
-        redirect: false
-      });
-
-      if (result?.error || !result?.ok) {
-        throw new Error("Invalid administrator email or password credentials.");
-      }
-
-      router.push(adminCallbackUrl as any);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Sign in failed. Please verify your admin credentials and try again."
-      );
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  async function handleGoogleSignIn(): Promise<void> {
     setError(null);
+    setMessage(null);
+    setIsSubmitting(true);
+
+    await signIn("google", {
+      callbackUrl
+    });
+  }
+
+  async function requestOtp(cleanEmail: string): Promise<void> {
+    const response = await fetch("/api/auth/otp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: cleanEmail })
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data?.error || "We could not send your verification code. Please try again.");
+    }
+
+    setIsOtpSent(true);
+    setMessage(`We sent a 6-digit code to ${cleanEmail}.`);
+  }
+
+  async function verifyOtp(cleanEmail: string): Promise<void> {
+    const cleanOtp = otp.replace(/\D/g, "");
+
+    if (!/^\d{6}$/.test(cleanOtp)) {
+      throw new Error("Please enter the 6-digit verification code.");
+    }
+
+    const result = await signIn("otp", {
+      email: cleanEmail,
+      otp: cleanOtp,
+      redirect: false
+    });
+
+    if (result?.error || !result?.ok) {
+      throw new Error("The verification code is invalid or expired.");
+    }
+
+    router.push(callbackUrl as any);
+    router.refresh();
+  }
+
+  async function handleAdminSignIn(cleanEmail: string): Promise<void> {
+    if (!password.trim()) {
+      throw new Error("Please enter your administrator password.");
+    }
+
+    const result = await signIn("credentials", {
+      email: cleanEmail,
+      password: password.trim(),
+      redirect: false
+    });
+
+    if (result?.error || !result?.ok) {
+      throw new Error("Invalid administrator email or password credentials.");
+    }
+
+    router.push(callbackUrl.startsWith("/admin") ? (callbackUrl as any) : "/admin");
+    router.refresh();
+  }
+
+  async function handleSubmit(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    setError(null);
+    setMessage(null);
     setIsSubmitting(true);
 
     const cleanEmail = email.toLowerCase().trim();
-    if (!cleanEmail) {
-      setError("Please enter a valid email address.");
+
+    try {
+      if (!cleanEmail) {
+        throw new Error("Please enter a valid email address.");
+      }
+
+      if (loginMode === "admin") {
+        await handleAdminSignIn(cleanEmail);
+      } else if (isOtpSent) {
+        await verifyOtp(cleanEmail);
+      } else {
+        await requestOtp(cleanEmail);
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Sign in failed. Please try again."
+      );
+    } finally {
       setIsSubmitting(false);
-      return;
     }
+  }
 
-    if (loginMode === "customer") {
-      await handleCustomerSignIn(cleanEmail);
-    } else {
-      await handleAdminSignIn(cleanEmail);
-    }
-
-    setIsSubmitting(false);
-  };
-
-  const toggleLoginMode = () => {
+  function toggleLoginMode(): void {
     setLoginMode(loginMode === "customer" ? "admin" : "customer");
     setEmail("");
+    setOtp("");
     setPassword("");
     setError(null);
-    setIsSent(false);
-  };
+    setMessage(null);
+    setIsOtpSent(false);
+    setCallbackUrl(loginMode === "customer" ? "/admin" : "/account");
+  }
 
   return (
-    <main className="bg-[#FAFAF8] text-[#0A0A0A] min-h-screen flex items-center justify-center p-6 select-none">
-      <div className="w-full max-w-[440px] bg-white border border-stone-200 p-8 md:p-10 rounded-none space-y-8">
-        
-        {/* Conditional rendering based on mail dispatched status */}
-        {!isSent ? (
-          <>
-            {/* Header Section */}
-            <div className="space-y-3 text-center md:text-left">
-              <div className="flex items-center justify-center md:justify-start gap-2 text-brand">
-                {loginMode === "customer" ? (
-                  <ShoppingBag className="h-4 w-4" />
-                ) : (
-                  <ShieldCheck className="h-4 w-4" />
-                )}
-                <span className="text-xs font-bold uppercase tracking-wider">
-                  {loginMode === "customer" ? "Secure Access" : "Admin Panel Access"}
-                </span>
-              </div>
-              <h1 className="font-serif text-4xl font-black text-stone-900 tracking-tight leading-none">
-                {loginMode === "customer" ? (
-                  <>
-                    Welcome back, <br />
-                    <span className="font-normal italic text-stone-700">Sign in to client portal</span>
-                  </>
-                ) : (
-                  <>
-                    Control Center, <br />
-                    <span className="font-normal italic text-stone-700">Administrator login</span>
-                  </>
-                )}
-              </h1>
-              <p className="text-xs font-light text-stone-500 leading-relaxed">
-                {loginMode === "customer" 
-                  ? "Enter your email address to receive a secure, passwordless magic link to log in."
-                  : "Enter your administrator credentials to securely log in directly to your workshop panel."
-                }
-              </p>
-            </div>
-
-            {/* Core Sign-In Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                Email Address
-                <input
-                  required
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    setError(null);
-                  }}
-                  placeholder="name@example.com"
-                  className="mt-2 h-11 w-full bg-[#FAFAF8] border border-stone-200 px-4 text-xs font-mono focus:outline-none focus:border-brand rounded-none"
-                />
-              </label>
-
-              {/* Password field - Only rendered in Admin Mode */}
-              {loginMode === "admin" && (
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400 animate-fade-in">
-                  Password Key
-                  <input
-                    required
-                    type="password"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      setError(null);
-                    }}
-                    placeholder="••••••••"
-                    className="mt-2 h-11 w-full bg-[#FAFAF8] border border-stone-200 px-4 text-xs font-mono focus:outline-none focus:border-brand rounded-none"
-                  />
-                </label>
-              )}
-
-              {/* Validation errors */}
-              {error && (
-                <div className="text-xs font-semibold text-red-600 bg-red-50 border border-red-100 p-3 rounded-none">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full h-12 bg-stone-900 hover:bg-brand text-white text-xs uppercase font-bold tracking-widest flex items-center justify-center gap-2 rounded-none transition duration-200 disabled:bg-stone-300"
-              >
-                {loginMode === "customer" ? <Mail className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
-                {isSubmitting 
-                  ? (loginMode === "customer" ? "Sending link..." : "Authorizing...") 
-                  : (loginMode === "customer" ? "Receive Magic Link" : "Log In As Admin")
-                }
-              </button>
-            </form>
-
-            {/* Dynamic Admin/Customer mode switcher trigger */}
-            <div className="text-center pt-2">
-              <button
-                type="button"
-                onClick={toggleLoginMode}
-                className="text-[10px] uppercase font-bold tracking-widest text-stone-400 hover:text-brand transition duration-150"
-              >
-                {loginMode === "customer" 
-                  ? "Are you an Administrator? Login here" 
-                  : "Customer? Access your client account here"
-                }
-              </button>
-            </div>
-          </>
-        ) : (
-          /* Inline Inbox success card (For Magic link dispatch) */
-          <div className="space-y-6 text-center md:text-left transition-all duration-500 ease-editorial animate-fade-in">
-            <div className="flex items-center justify-center md:justify-start gap-2 text-emerald-700">
-              <Mail className="h-5 w-5" />
-              <span className="text-xs font-bold uppercase tracking-wider">Check your inbox</span>
-            </div>
-            
-            <h2 className="font-serif text-3xl font-black text-stone-900 tracking-tight leading-none">
-              Link Dispatched.
-            </h2>
-            
-            <p className="text-xs font-light text-stone-600 leading-relaxed">
-              We have dispatched a secure, passwordless login link to <strong className="font-mono text-stone-900">{email}</strong>. 
-              Open your email and click the link to instantly access your client account dashboard.
-            </p>
-
-            <div className="bg-stone-50 border border-stone-200 p-4 rounded-none text-[11px] text-stone-400 font-light leading-relaxed">
-              *If the email doesn't arrive within 2 minutes, check your Spam/Junk folder or try requesting a new link.
-            </div>
-
-            <button
-              onClick={() => {
-                setIsSent(false);
-                setEmail("");
-              }}
-              className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-brand hover:underline"
-            >
-              Request another link
-              <ArrowRight className="h-3 w-3" />
-            </button>
+    <main className="flex min-h-screen items-center justify-center bg-[#FAFAF8] p-6 text-[#0A0A0A]">
+      <div className="w-full max-w-[460px] space-y-8 border border-stone-200 bg-white p-8 md:p-10">
+        <div className="space-y-3 text-left">
+          <div className="flex items-center gap-2 text-brand">
+            {loginMode === "customer" ? (
+              <ShoppingBag className="h-4 w-4" />
+            ) : (
+              <ShieldCheck className="h-4 w-4" />
+            )}
+            <span className="text-xs font-bold uppercase tracking-wider">
+              {loginMode === "customer" ? "Secure Access" : "Admin Panel Access"}
+            </span>
           </div>
-        )}
+          <h1 className="font-serif text-4xl font-black leading-none tracking-tight text-stone-900">
+            {loginMode === "customer" ? (
+              <>
+                Welcome back, <br />
+                <span className="font-normal italic text-stone-700">Verify your email</span>
+              </>
+            ) : (
+              <>
+                Control Center, <br />
+                <span className="font-normal italic text-stone-700">Administrator login</span>
+              </>
+            )}
+          </h1>
+          <p className="text-xs font-light leading-relaxed text-stone-500">
+            {loginMode === "customer"
+              ? "Use Google or receive a 6-digit email code to access your client account."
+              : "Enter your administrator credentials to securely access the workshop panel."}
+          </p>
+        </div>
 
-        <div className="pt-4 border-t border-stone-100 text-center">
+        {loginMode === "customer" ? (
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            disabled={isSubmitting}
+            className="flex h-12 w-full items-center justify-center gap-3 border border-stone-900 bg-white text-xs font-bold uppercase tracking-widest text-stone-900 transition duration-200 hover:bg-stone-900 hover:text-white disabled:border-stone-300 disabled:text-stone-400"
+          >
+            <span className="font-serif text-base font-black">G</span>
+            Sign in with Google
+          </button>
+        ) : null}
+
+        {loginMode === "customer" ? (
+          <div className="flex items-center gap-3 text-[0.68rem] font-medium uppercase tracking-[0.12em] text-stone-400">
+            <span className="h-px flex-1 bg-stone-200" />
+            Email code
+            <span className="h-px flex-1 bg-stone-200" />
+          </div>
+        ) : null}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+            Email Address
+            <input
+              required
+              type="email"
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setError(null);
+                setMessage(null);
+              }}
+              placeholder="name@example.com"
+              className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 font-mono text-xs text-stone-900 outline-none focus:border-brand"
+            />
+          </label>
+
+          {loginMode === "customer" && isOtpSent ? (
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+              Verification Code
+              <input
+                required
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(event) => {
+                  setOtp(event.target.value.replace(/\D/g, "").slice(0, 6));
+                  setError(null);
+                }}
+                placeholder="123456"
+                className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 font-mono text-xs tracking-[0.2em] text-stone-900 outline-none focus:border-brand"
+              />
+            </label>
+          ) : null}
+
+          {loginMode === "admin" ? (
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+              Password Key
+              <input
+                required
+                type="password"
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setError(null);
+                }}
+                placeholder={PASSWORD_PLACEHOLDER}
+                className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 font-mono text-xs text-stone-900 outline-none focus:border-brand"
+              />
+            </label>
+          ) : null}
+
+          {message ? (
+            <div className="border border-stone-200 bg-stone-50 p-3 text-xs font-light leading-relaxed text-stone-600">
+              {message}
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="border border-red-100 bg-red-50 p-3 text-xs font-semibold text-red-700">
+              {error}
+            </div>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="flex h-12 w-full items-center justify-center gap-2 bg-stone-900 text-xs font-bold uppercase tracking-widest text-white transition duration-200 hover:bg-brand disabled:bg-stone-300"
+          >
+            {loginMode === "admin" ? (
+              <Lock className="h-3.5 w-3.5" />
+            ) : isOtpSent ? (
+              <KeyRound className="h-3.5 w-3.5" />
+            ) : (
+              <Mail className="h-3.5 w-3.5" />
+            )}
+            {getSubmitLabel(loginMode, isOtpSent, isSubmitting)}
+          </button>
+        </form>
+
+        {loginMode === "customer" && isOtpSent ? (
+          <button
+            type="button"
+            onClick={() => {
+              setIsOtpSent(false);
+              setOtp("");
+              setMessage(null);
+              setError(null);
+            }}
+            className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-brand hover:underline"
+          >
+            Use a different email
+            <ArrowRight className="h-3 w-3" />
+          </button>
+        ) : null}
+
+        <div className="border-t border-stone-100 pt-4 text-center">
+          <button
+            type="button"
+            onClick={toggleLoginMode}
+            className="text-[10px] font-bold uppercase tracking-widest text-stone-400 transition duration-150 hover:text-brand"
+          >
+            {loginMode === "customer"
+              ? "Are you an Administrator? Login here"
+              : "Customer? Access your client account here"}
+          </button>
+        </div>
+
+        <div className="text-center">
           <Link
             href="/"
             className="text-[11px] font-bold uppercase tracking-wider text-brand hover:underline"
@@ -265,8 +319,19 @@ export default function SignInPage(): React.JSX.Element {
             Back to homepage
           </Link>
         </div>
-
       </div>
     </main>
   );
+}
+
+function getSubmitLabel(loginMode: LoginMode, isOtpSent: boolean, isSubmitting: boolean): string {
+  if (loginMode === "admin") {
+    return isSubmitting ? "Authorizing..." : "Log In As Admin";
+  }
+
+  if (isOtpSent) {
+    return isSubmitting ? "Verifying..." : "Verify Code";
+  }
+
+  return isSubmitting ? "Sending code..." : "Send Verification Code";
 }

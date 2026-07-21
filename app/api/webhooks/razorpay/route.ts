@@ -14,7 +14,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   // 1. Cryptographically Verify Webhook Signature (Rule 7)
-  const isSignatureValid = verifyWebhookSignature(rawBody, incomingSignature);
+  const isSignatureValid = await verifyWebhookSignature(rawBody, incomingSignature);
   if (!isSignatureValid) {
     logger.error("Razorpay webhook signature verification failed: Hash mismatch");
     return NextResponse.json({ error: "Invalid cryptographic signature" }, { status: 400 });

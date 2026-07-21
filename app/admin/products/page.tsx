@@ -33,6 +33,25 @@ export default async function AdminProductsPage(): Promise<React.JSX.Element> {
       orderBy: { name: "asc" }
     })
   ]);
+  const unassignedProducts = products.filter((product) => !product.categoryId);
+  const categorizedProductSections = [
+    ...categories.map((category) => ({
+      id: category.id,
+      name: category.name,
+      description: category.description,
+      products: products.filter((product) => product.categoryId === category.id)
+    })),
+    ...(unassignedProducts.length > 0
+      ? [
+          {
+            id: "unassigned",
+            name: "Unassigned Products",
+            description: "Products that still need a category mapping.",
+            products: unassignedProducts
+          }
+        ]
+      : [])
+  ];
 
   async function updateProduct(formData: FormData) {
     "use server";
@@ -129,7 +148,7 @@ export default async function AdminProductsPage(): Promise<React.JSX.Element> {
           </Link>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <div className="mt-5 grid gap-3 sm:grid-cols-4">
           <div className="border border-stone-200 bg-[#FAFAF8] p-3 rounded-none">
             <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Products</p>
             <p className="mt-2 font-serif text-2xl font-black text-stone-900">{products.length}</p>
@@ -139,6 +158,10 @@ export default async function AdminProductsPage(): Promise<React.JSX.Element> {
             <p className="mt-2 font-serif text-2xl font-black text-stone-900">
               {products.filter((product) => product.isActive).length}
             </p>
+          </div>
+          <div className="border border-stone-200 bg-[#FAFAF8] p-3 rounded-none">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Categories</p>
+            <p className="mt-2 font-serif text-2xl font-black text-stone-900">{categories.length}</p>
           </div>
           <div className="border border-stone-200 bg-[#FAFAF8] p-3 rounded-none">
             <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">Images</p>
@@ -154,8 +177,43 @@ export default async function AdminProductsPage(): Promise<React.JSX.Element> {
           <p className="font-serif text-3xl italic text-stone-400">No products in the catalog yet.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {products.map((product) => {
+        <div className="space-y-8">
+          {categorizedProductSections.map((section) => (
+            <section key={section.id} className="space-y-3">
+              <div className="flex flex-col gap-3 border-b border-stone-200 pb-4 md:flex-row md:items-end md:justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3 text-brand">
+                    <span className="h-px w-7 bg-brand" />
+                    <p className="text-[10px] font-bold uppercase tracking-widest">
+                      Category
+                    </p>
+                  </div>
+                  <h2 className="font-serif text-3xl font-black leading-none text-stone-900">
+                    {section.name.split(" ")[0]}{" "}
+                    <span className="font-normal italic text-stone-700">
+                      {section.name.split(" ").slice(1).join(" ") || "Products"}
+                    </span>
+                  </h2>
+                  {section.description ? (
+                    <p className="max-w-[65ch] text-xs font-light leading-6 text-stone-500">
+                      {section.description}
+                    </p>
+                  ) : null}
+                </div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
+                  {section.products.length} {section.products.length === 1 ? "product" : "products"}
+                </p>
+              </div>
+
+              {section.products.length === 0 ? (
+                <div className="border border-dashed border-stone-300 bg-white p-6">
+                  <p className="font-serif text-2xl italic text-stone-400">
+                    No products assigned to this category yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {section.products.map((product) => {
             const initialImages: Array<ProductImageUploaderItem> = product.images.map((image) => ({
               id: image.id,
               url: image.url,
@@ -210,10 +268,15 @@ export default async function AdminProductsPage(): Promise<React.JSX.Element> {
 
                     <div className="grid gap-2 text-[10px] font-bold uppercase tracking-widest text-stone-400 sm:grid-cols-4">
                       <span>
-                        Price{" "}
+                        Customer price{" "}
                         <strong className="block pt-1 text-xs tracking-normal text-brand">
                           {formatPaise(product.salePricePaise ?? product.basePricePaise)}
                         </strong>
+                        {product.salePricePaise !== null && product.salePricePaise < product.basePricePaise ? (
+                          <span className="block pt-0.5 text-[10px] tracking-normal text-stone-400 line-through">
+                            {formatPaise(product.basePricePaise)}
+                          </span>
+                        ) : null}
                       </span>
                       <span>
                         Stock{" "}
@@ -367,7 +430,7 @@ export default async function AdminProductsPage(): Promise<React.JSX.Element> {
 
                       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                          Base price
+                          Selling price
                           <input
                             required
                             type="number"
@@ -379,7 +442,7 @@ export default async function AdminProductsPage(): Promise<React.JSX.Element> {
                           />
                         </label>
                         <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                          Sale price
+                          Customer price
                           <input
                             type="number"
                             step="0.01"
@@ -520,6 +583,10 @@ export default async function AdminProductsPage(): Promise<React.JSX.Element> {
               </details>
             );
           })}
+                </div>
+              )}
+            </section>
+          ))}
         </div>
       )}
     </div>

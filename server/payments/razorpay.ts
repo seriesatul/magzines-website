@@ -3,16 +3,12 @@ import Razorpay from "razorpay";
 import { env } from "@/config/env";
 import { logger } from "@/server/logger/logger";
 import { type ServiceResult, success, failure } from "@/server/services/result";
+import { getStringSetting } from "@/server/services/settings";
 
 // Validate Razorpay configuration parameters at application boot
 if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
   logger.warn("Razorpay API credentials are missing from the configuration schema.");
 }
-
-export const razorpay = new Razorpay({
-  key_id: env.RAZORPAY_KEY_ID,
-  key_secret: env.RAZORPAY_KEY_SECRET
-});
 
 interface CreateOrderParams {
   amountPaise: number; // Enforced in Paise integer (Rule 2)
@@ -32,6 +28,18 @@ interface RazorpayOrderResponse {
   attempts: number;
   notes: Record<string, string>;
   created_at: number;
+}
+
+async function getRazorpayClient(): Promise<Razorpay> {
+  const [keyId, keySecret] = await Promise.all([
+    getStringSetting("razorpayKeyId"),
+    getStringSetting("razorpayKeySecret")
+  ]);
+
+  return new Razorpay({
+    key_id: keyId,
+    key_secret: keySecret
+  });
 }
 
 /**
@@ -59,6 +67,7 @@ export async function createRazorpayOrder({
     };
 
     logger.info({ receiptId, amountPaise }, "Initiating order creation with Razorpay");
+    const razorpay = await getRazorpayClient();
     const order = (await razorpay.orders.create(options)) as RazorpayOrderResponse;
 
     logger.info({ orderId: order.id, receiptId }, "Successfully generated Razorpay order");
@@ -74,14 +83,15 @@ export async function createRazorpayOrder({
  * Validates frontend checkout payments signature (razorpay_order_id | razorpay_payment_id)
  * before committing state changes to database transactions.
  */
-export function verifyPaymentSignature(
+export async function verifyPaymentSignature(
   razorpayOrderId: string,
   razorpayPaymentId: string,
   razorpaySignature: string
-): boolean {
+): Promise<boolean> {
   try {
+    const keySecret = await getStringSetting("razorpayKeySecret");
     const generatedSignature = crypto
-      .createHmac("sha256", env.RAZORPAY_KEY_SECRET)
+      .createHmac("sha256", keySecret)
       .update(`${razorpayOrderId}|${razorpayPaymentId}`)
       .digest("hex");
 
@@ -106,10 +116,10 @@ export function verifyPaymentSignature(
  * Securely verifies incoming Webhook HMAC SHA256 signatures against the raw payload.
  * Uses timingSafeEqual to defeat potential timing-analysis side-channel attacks.
  */
-export function verifyWebhookSignature(
+export async function verifyWebhookSignature(
   rawPayload: string,
   incomingSignature: string
-): boolean {
+): Promise<boolean> {
   try {
     if (!env.RAZORPAY_WEBHOOK_SECRET) {
       logger.error("Cannot verify Razorpay webhook signature: RAZORPAY_WEBHOOK_SECRET is not configured.");

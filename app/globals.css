@@ -4,6 +4,9 @@
 
 @layer base {
   :root {
+    --font-playfair: "Playfair Display", Georgia, serif;
+    --font-dm-sans: "DM Sans", system-ui, sans-serif;
+
     /* Backgrounds: #FAFAF8 (warm off-white) & Pure White */
     --background: 60 13% 98%;
     --foreground: 0 0% 4%;

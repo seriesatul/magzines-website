@@ -18,6 +18,8 @@ const parsedServerEnv = serverEnvSchema.safeParse({
   AUTH_SECRET: process.env.AUTH_SECRET,
   AUTH_URL: process.env.AUTH_URL,
   AUTH_TRUST_HOST: process.env.AUTH_TRUST_HOST,
+  AUTH_GOOGLE_ID: process.env.AUTH_GOOGLE_ID,
+  AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET,
   ADMIN_EMAILS: process.env.ADMIN_EMAILS,
   UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
   UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,

@@ -1,25 +1,271 @@
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { OrderStatus, PaymentStatus } from "@prisma/client";
+import type { OrderStatus } from "@prisma/client";
 import { db } from "@/server/db/client";
 import { formatPaise } from "@/server/db/money";
 import { logger } from "@/server/logger/logger";
-import { dispatchOrderStatusNotification } from "@/server/services/order-notifications";
-import { RevealOnScroll } from "@/components/storefront/RevealOnScroll";
-import { ArrowLeft, MessageSquare, Tag, MapPin, ClipboardList, PenTool, Image as ImageIcon } from "lucide-react";
-import { env } from "@/config/env"; // Correctly imported from verified config (Rule 9)
+import {
+  dispatchOrderStatusNotification,
+  type OrderStatusType
+} from "@/server/services/order-notifications";
+import {
+  ArrowLeft,
+  ClipboardList,
+  Download,
+  ExternalLink,
+  Image as ImageIcon,
+  MapPin,
+  MessageSquare
+} from "lucide-react";
+import {
+  getPhotobookTemplate,
+  type PhotobookLayoutMetadata,
+  type PhotobookLayoutType,
+  type PhotobookPage
+} from "@/types/photobook";
 
 const FALLBACK_PRODUCT_IMAGE =
   "https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=1200&q=80";
 
 // Global, typed read-only array to ensure 100% parameter type-safety (resolves implicit any)
-const STATUS_STEPS = ["PENDING", "DESIGNING", "PRINTING", "SHIPPED", "DELIVERED"] as const;
+const STATUS_STEPS = ["PENDING", "DESIGNING", "SHIPPED"] as const;
+const NOTIFIABLE_STATUS_STEPS = ["DESIGNING", "SHIPPED"] as const;
+const LAYOUT_TYPES = [
+  "FULL_BLEED_1_PHOTO",
+  "GRID_3_PHOTO_BOTTOM_TEXT",
+  "GRID_5_PHOTO_DOUBLE_TEXT"
+] as const;
 
 interface AdminOrderDetailPageProps {
   params: Promise<{ id: string }>;
+}
+
+function isPhotobookLayoutType(value: unknown): value is PhotobookLayoutType {
+  return typeof value === "string" && LAYOUT_TYPES.includes(value as PhotobookLayoutType);
+}
+
+function isNotifiableOrderStatus(value: OrderStatus): value is OrderStatusType {
+  return NOTIFIABLE_STATUS_STEPS.includes(value as OrderStatusType);
+}
+
+function normalizeAdminOrderStatus(value: OrderStatus): (typeof STATUS_STEPS)[number] {
+  if (value === "SHIPPED" || value === "DELIVERED") {
+    return "SHIPPED";
+  }
+
+  if (value === "DESIGNING" || value === "PRINTING") {
+    return "DESIGNING";
+  }
+
+  return "PENDING";
+}
+
+function formatAdminOrderStatus(value: OrderStatus): string {
+  if (value === "PENDING") {
+    return "Order placed";
+  }
+
+  if (value === "DESIGNING") {
+    return "Order in progress";
+  }
+
+  if (value === "SHIPPED") {
+    return "Order shipped";
+  }
+
+  return value;
+}
+
+function normalizeLayoutMetadata(value: unknown): PhotobookLayoutMetadata {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((page, index): PhotobookPage | null => {
+      if (!page || typeof page !== "object") {
+        return null;
+      }
+
+      const candidate = page as Record<string, unknown>;
+      const layoutType = candidate.layoutType;
+
+      if (!isPhotobookLayoutType(layoutType)) {
+        return null;
+      }
+
+      const texts =
+        candidate.texts && typeof candidate.texts === "object" && !Array.isArray(candidate.texts)
+          ? Object.fromEntries(
+              Object.entries(candidate.texts as Record<string, unknown>).map(([key, text]) => [
+                key,
+                typeof text === "string" ? text : ""
+              ])
+            )
+          : {};
+
+      const photos = Array.isArray(candidate.photos)
+        ? candidate.photos
+            .map((photo) => {
+              if (!photo || typeof photo !== "object") {
+                return null;
+              }
+
+              const photoCandidate = photo as Record<string, unknown>;
+              if (typeof photoCandidate.url !== "string") {
+                return null;
+              }
+
+              return {
+                slot: typeof photoCandidate.slot === "number" ? photoCandidate.slot : 1,
+                key: typeof photoCandidate.key === "string" ? photoCandidate.key : "",
+                url: photoCandidate.url,
+                name: typeof photoCandidate.name === "string" ? photoCandidate.name : "",
+                size: typeof photoCandidate.size === "number" ? photoCandidate.size : 0
+              };
+            })
+            .filter((photo): photo is NonNullable<typeof photo> => photo !== null)
+        : [];
+
+      return {
+        pageNumber:
+          typeof candidate.pageNumber === "number" ? candidate.pageNumber : index + 1,
+        layoutType,
+        texts,
+        photos
+      };
+    })
+    .filter((page): page is PhotobookPage => page !== null)
+    .sort((a, b) => a.pageNumber - b.pageNumber);
+}
+
+function PrintBlueprintCanvas({ page }: { page: PhotobookPage }): React.JSX.Element {
+  const photoBySlot = new Map(page.photos.map((photo) => [photo.slot, photo]));
+
+  const renderSlot = (slot: number, className: string) => {
+    const photo = photoBySlot.get(slot);
+
+    return (
+      <div key={slot} className={`${className} relative overflow-hidden border border-stone-200 bg-[#FAFAF8]`}>
+        {photo?.url ? (
+          <img
+            src={photo.url}
+            alt={photo.name || `Page ${page.pageNumber} slot ${slot}`}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center px-2 text-center text-[9px] font-bold uppercase tracking-widest text-stone-400">
+            Empty Slot {slot}
+          </div>
+        )}
+        <span className="absolute left-1.5 top-1.5 bg-stone-900 px-1.5 py-0.5 text-[8px] font-bold text-white">
+          {slot}
+        </span>
+      </div>
+    );
+  };
+
+  if (page.layoutType === "FULL_BLEED_1_PHOTO") {
+    return (
+      <div className="relative aspect-[3/4] overflow-hidden border border-stone-200 bg-white">
+        {renderSlot(1, "absolute inset-0")}
+        {page.texts.overlay ? (
+          <div className="pointer-events-none absolute inset-x-5 top-1/2 -translate-y-1/2 text-center">
+            <p className="font-serif text-2xl italic leading-tight text-white [text-shadow:0_1px_12px_rgba(0,0,0,0.55)]">
+              {page.texts.overlay}
+            </p>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (page.layoutType === "GRID_3_PHOTO_BOTTOM_TEXT") {
+    return (
+      <div className="aspect-[3/4] overflow-hidden border border-stone-200 bg-white p-2.5">
+        <div className="grid h-[84%] grid-cols-[1.4fr_0.9fr] gap-2">
+          {renderSlot(1, "min-h-0")}
+          <div className="grid min-h-0 gap-2">
+            {renderSlot(2, "min-h-0")}
+            {renderSlot(3, "min-h-0")}
+          </div>
+        </div>
+        <div className="flex h-[16%] items-center border-t border-stone-200 pt-2">
+          <p className="font-serif text-lg italic leading-none text-stone-900">
+            {page.texts.subtitle || ""}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="aspect-[3/4] overflow-hidden border border-stone-200 bg-white p-2.5">
+      <div className="grid h-full grid-cols-6 grid-rows-6 gap-1.5">
+        {renderSlot(1, "col-span-4 row-span-3")}
+        {renderSlot(2, "col-span-2 row-span-2")}
+        {renderSlot(3, "col-span-2 row-span-2")}
+        <div className="col-span-3 row-span-1 flex items-center border-y border-stone-200 px-1.5">
+          <p className="font-serif text-sm italic leading-none text-stone-900">
+            {page.texts.header1 || ""}
+          </p>
+        </div>
+        {renderSlot(4, "col-span-3 row-span-3")}
+        {renderSlot(5, "col-span-3 row-span-2")}
+        <div className="col-span-3 row-span-1 flex items-center justify-end border-t border-stone-200 px-1.5 text-right">
+          <p className="text-[8px] font-bold uppercase tracking-widest text-brand">
+            {page.texts.header2 || ""}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrintBlueprintViewer({
+  itemName,
+  layoutMetadata
+}: {
+  itemName: string;
+  layoutMetadata: unknown;
+}): React.JSX.Element | null {
+  const pages = normalizeLayoutMetadata(layoutMetadata);
+
+  if (pages.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-5 border-t border-stone-100 py-6 first:border-t-0 first:pt-0 last:pb-0">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-brand">
+            Print Blueprint
+          </p>
+          <h3 className="mt-2 font-serif text-2xl font-black leading-none text-stone-900">
+            {itemName} <span className="font-normal italic text-stone-700">spread map</span>
+          </h3>
+        </div>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
+          {pages.length} Pages / {pages.reduce((sum, page) => sum + page.photos.length, 0)} Photos
+        </p>
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        {pages.map((page) => (
+          <article key={`${itemName}-${page.pageNumber}`} className="border border-stone-200 bg-[#FAFAF8] p-3">
+            <PrintBlueprintCanvas page={page} />
+            <div className="mt-3 flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-wider">
+              <span className="text-stone-900">Page {page.pageNumber}</span>
+              <span className="text-stone-400">{getPhotobookTemplate(page.layoutType).shortName}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default async function AdminOrderDetailPage({
@@ -40,6 +286,7 @@ export default async function AdminOrderDetailPage({
   // Define static variables to resolve server action nullity warnings cleanly (Rule 6)
   const activeOrderId = order.id;
   const activeOrderNumber = order.orderNumber;
+  const currentPipelineStatus = normalizeAdminOrderStatus(order.status);
 
   // 2. Fetch associated items, photos, and private internal notes in parallel (Rule 4)
   const [orderItems, uploadedPhotos, internalNotes] = await Promise.all([
@@ -47,6 +294,9 @@ export default async function AdminOrderDetailPage({
     db.photoUpload.findMany({ where: { orderId: order.id }, orderBy: { createdAt: "asc" } }),
     db.internalNote.findMany({ where: { orderId: order.id }, orderBy: { createdAt: "desc" } })
   ]);
+  const orderItemsWithLayout = orderItems as Array<
+    (typeof orderItems)[number] & { layoutMetadata: unknown }
+  >;
 
   // Server Action 1: Handle Order Status & Tracking updates (Rule 7.4 & 5.3)
   async function updateOrderStatus(formData: FormData) {
@@ -68,8 +318,8 @@ export default async function AdminOrderDetailPage({
       });
 
       // Trigger automatic Meta WhatsApp template notification (Rule 5.3)
-      if (["DESIGNING", "PRINTING", "SHIPPED", "DELIVERED"].includes(statusInput)) {
-        await dispatchOrderStatusNotification(activeOrderId, statusInput as any);
+      if (isNotifiableOrderStatus(statusInput)) {
+        await dispatchOrderStatusNotification(activeOrderId, statusInput);
       }
 
       revalidatePath(`/admin/orders/${activeOrderId}`);
@@ -105,27 +355,6 @@ export default async function AdminOrderDetailPage({
     }
   }
 
-  const currentStep = STATUS_STEPS.indexOf(order.status as any);
-  const activeStep = currentStep !== -1 ? currentStep : 0;
-
-  const formattedDelivery = order.estimatedDeliveryAt
-    ? new Date(order.estimatedDeliveryAt).toLocaleDateString("en-IN", {
-        weekday: "long",
-        day: "numeric",
-        month: "long"
-      })
-    : "TBD";
-
-  // Check if any items are set to upload later via WhatsApp
-  const isWhatsAppUploadPending = orderItems.some((item) => item.quantity > 0) && order.status === "PENDING"; // Checks if photos are pending review on WhatsApp
-
-  // Encode direct WhatsApp message for seamless handoff
-  const whatsappNumberClean = env.NEXT_PUBLIC_SUPPORT_PHONE.replace(/\D/g, "");
-  const whatsappMessage = encodeURIComponent(
-    `Hi Hearts & Beans! I just placed order #${order.orderNumber} and would like to share my photos for design curation.`
-  );
-  const whatsappUrl = `https://wa.me/${whatsappNumberClean}?text=${whatsappMessage}`;
-
   return (
     <div className="space-y-10">
       
@@ -133,7 +362,7 @@ export default async function AdminOrderDetailPage({
       <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-stone-200 pb-6 gap-4">
         <div className="space-y-2">
           <Link
-            href={"/admin/orders" as any}
+            href="/admin/orders"
             className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-stone-400 hover:text-brand transition"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -176,27 +405,87 @@ export default async function AdminOrderDetailPage({
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-4 md:grid-cols-6 gap-2">
-                {uploadedPhotos.map((photo, idx) => (
+              <div className="space-y-5">
+                <div className="flex flex-wrap gap-3 border border-stone-200 bg-[#FAFAF8] p-3">
                   <a
-                    key={photo.id}
-                    href={photo.publicUrl || "#"}
+                    href={`/api/admin/orders/${order.id}/photos`}
+                    className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-4 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download All Originals
+                  </a>
+                  <a
+                    href="https://www.canva.com/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="relative aspect-square border border-stone-100 group overflow-hidden bg-stone-50 block"
-                    title={`View photo ${idx + 1}`}
+                    className="inline-flex h-10 items-center justify-center gap-2 border border-stone-900 bg-white px-4 text-[10px] font-bold uppercase tracking-widest text-stone-900 transition hover:bg-stone-900 hover:text-white"
                   >
-                    <Image
-                      src={photo.publicUrl || FALLBACK_PRODUCT_IMAGE}
-                      alt={photo.originalName}
-                      fill
-                      className="object-cover group-hover:scale-[1.05] transition duration-300"
-                    />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition text-white text-[9px] uppercase font-bold">
-                      Open Full
-                    </div>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Open Canva
                   </a>
-                ))}
+                  <a
+                    href="https://photoshop.adobe.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-10 items-center justify-center gap-2 border border-stone-300 bg-white px-4 text-[10px] font-bold uppercase tracking-widest text-stone-700 transition hover:border-brand hover:text-brand"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Open Photoshop
+                  </a>
+                  <p className="flex min-h-10 items-center text-[10px] font-light leading-5 text-stone-500">
+                    Uploads and downloads use the stored original files; the ZIP archive is packaged without image recompression.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {uploadedPhotos.map((photo, idx) => (
+                    <article key={photo.id} className="border border-stone-200 bg-[#FAFAF8] p-3">
+                      <a
+                        href={photo.publicUrl || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group relative block aspect-square overflow-hidden border border-stone-100 bg-stone-50"
+                        title={`View photo ${idx + 1}`}
+                      >
+                        <img
+                          src={photo.publicUrl || FALLBACK_PRODUCT_IMAGE}
+                          alt={photo.originalName}
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-[9px] font-bold uppercase tracking-widest text-white opacity-0 transition group-hover:opacity-100">
+                          Open Full
+                        </div>
+                      </a>
+                      <div className="mt-3 min-w-0 space-y-2">
+                        <p className="truncate text-[11px] font-bold text-stone-900">
+                          {photo.originalName}
+                        </p>
+                        <p className="font-mono text-[10px] text-stone-400">
+                          {(photo.sizeBytes / (1024 * 1024)).toFixed(2)} MB / {photo.mimeType}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <a
+                            href={photo.publicUrl || "#"}
+                            download={photo.originalName}
+                            className="inline-flex h-9 items-center justify-center gap-2 bg-stone-900 px-3 text-[9px] font-bold uppercase tracking-widest text-white transition hover:bg-brand"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            Download
+                          </a>
+                          <a
+                            href={photo.publicUrl || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex h-9 items-center justify-center gap-2 border border-stone-300 bg-white px-3 text-[9px] font-bold uppercase tracking-widest text-stone-700 transition hover:border-brand hover:text-brand"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            Original
+                          </a>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -211,7 +500,12 @@ export default async function AdminOrderDetailPage({
                     <p className="font-semibold text-stone-900 text-sm">{item.productName}</p>
                     <p className="font-mono text-stone-400">Slug: {item.productSlug}</p>
                     {item.customMessage && (
-                      <p className="text-stone-500 italic mt-2">" {item.customMessage} "</p>
+                      <p className="mt-2 max-w-[70ch] border-l-2 border-brand bg-[#FAFAF8] px-3 py-2 text-stone-600">
+                        <span className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-brand">
+                          Customization description
+                        </span>
+                        {item.customMessage}
+                      </p>
                     )}
                   </div>
                   <div className="text-right space-y-1">
@@ -222,6 +516,18 @@ export default async function AdminOrderDetailPage({
               ))}
             </div>
           </div>
+
+          {orderItemsWithLayout.some((item) => normalizeLayoutMetadata(item.layoutMetadata).length > 0) ? (
+            <div className="border border-stone-200 bg-white p-6 md:p-8 rounded-none">
+              {orderItemsWithLayout.map((item) => (
+                <PrintBlueprintViewer
+                  key={`${item.id}-print-blueprint`}
+                  itemName={item.productName}
+                  layoutMetadata={item.layoutMetadata}
+                />
+              ))}
+            </div>
+          ) : null}
 
           {/* Customer Special Notes Card */}
           <div className="border border-stone-200 bg-white p-6 md:p-8 rounded-none space-y-4">
@@ -244,13 +550,12 @@ export default async function AdminOrderDetailPage({
                 Status Stage
                 <select
                   name="status"
-                  defaultValue={order.status}
+                  defaultValue={currentPipelineStatus}
                   className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-3 text-xs font-semibold outline-none focus:border-brand rounded-none cursor-pointer"
                 >
                   {STATUS_STEPS.map((st) => (
-                    <option key={st} value={st}>{st}</option>
+                    <option key={st} value={st}>{formatAdminOrderStatus(st)}</option>
                   ))}
-                  <option value="CANCELLED">CANCELLED</option>
                 </select>
               </label>
 
@@ -315,7 +620,7 @@ export default async function AdminOrderDetailPage({
             {/* Log list */}
             {internalNotes && internalNotes.length > 0 ? (
               <div className="space-y-4 max-h-[180px] overflow-y-auto pt-2">
-                {internalNotes.map((note: any) => (
+                {internalNotes.map((note) => (
                   <div key={note.id} className="bg-stone-50 border border-stone-200 p-3 rounded-none text-[11px] leading-5 space-y-1">
                     <p className="font-light text-stone-700">{note.note}</p>
                     <span className="block text-[9px] text-stone-400 font-mono">
