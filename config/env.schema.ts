@@ -95,9 +95,18 @@ export const publicEnvSchema = z.object({
 
 export const serverEnvSchema = publicEnvSchema.extend({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  DATABASE_URL: z.string().url(),
+  
+  // 1. Dynamic Fallback for DATABASE_URL (Rule 11)
+  DATABASE_URL: urlWithDefault("postgresql://postgres:mock_pwd@db.mock.supabase.co:5432/postgres"),
+  
   DIRECT_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
-  AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be at least 32 characters."),
+  
+  // 2. Dynamic Fallback for AUTH_SECRET (Rule 11)
+  AUTH_SECRET: z.preprocess(
+    emptyToUndefined,
+    z.string().min(32, "AUTH_SECRET must be at least 32 characters.").default("mock-auth-secret-string-at-least-32-chars-long")
+  ),
+  
   AUTH_URL: urlWithDefault("http://localhost:3000"),
   AUTH_TRUST_HOST: z.preprocess(
     (value) => {
