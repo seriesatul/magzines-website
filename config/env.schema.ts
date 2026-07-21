@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+/**
+ * Normalizes empty strings, null, and undefined values to a unified undefined type.
+ * This ensures Zod's .optional() and .default() fallbacks catch and process them cleanly (Rule 10.8).
+ */
+function emptyToUndefined(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  return typeof value === "string" && value.trim().length === 0 ? undefined : value;
+}
+
 const booleanStringSchema = z
   .enum(["true", "false"])
   .transform((value: "true" | "false"): boolean => value === "true");
@@ -8,10 +19,6 @@ const integerStringSchema = z
   .string()
   .regex(/^\d+$/, "Must be a positive integer string.")
   .transform((value: string): number => Number.parseInt(value, 10));
-
-function emptyToUndefined(value: unknown): unknown {
-  return typeof value === "string" && value.trim().length === 0 ? undefined : value;
-}
 
 function stringWithDefault(defaultValue: string) {
   return z.preprocess(emptyToUndefined, z.string().min(1).default(defaultValue));
