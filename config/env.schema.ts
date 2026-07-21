@@ -52,10 +52,16 @@ function integerStringWithDefault(defaultValue: string) {
   );
 }
 
-const optionalUrlSchema = z.preprocess(
-  emptyToUndefined,
-  z.string().url().optional()
-);
+const optionalPublicUrlSchema = z
+  .unknown()
+  .transform((value): string | undefined => {
+    if (typeof value !== "string") {
+      return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  });
 
 const indianPhoneSchema = z
   .string()
@@ -97,7 +103,7 @@ export const publicEnvSchema = z.object({
   NEXT_PUBLIC_RAZORPAY_KEY_ID: stringWithDefault("rzp_test_replace"),
   NEXT_PUBLIC_GA_MEASUREMENT_ID: stringWithDefault("G-0000000000"),
   NEXT_PUBLIC_META_PIXEL_ID: numericStringWithDefault("000000000000000"),
-  NEXT_PUBLIC_SENTRY_DSN: optionalUrlSchema
+  NEXT_PUBLIC_SENTRY_DSN: optionalPublicUrlSchema
 });
 
 export const serverEnvSchema = publicEnvSchema.extend({
