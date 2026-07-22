@@ -11,6 +11,13 @@ const isGoogleConfigured =
   env.AUTH_GOOGLE_ID.trim().length > 0 &&
   env.AUTH_GOOGLE_SECRET.trim().length > 0;
 
+const authOrigin = resolveAuthOrigin();
+
+if (authOrigin) {
+  process.env.AUTH_URL = authOrigin;
+  process.env.NEXTAUTH_URL = authOrigin;
+}
+
 export const authConfig = {
   adapter: PrismaAdapter(db),
   providers: [
@@ -225,4 +232,49 @@ export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
 
 export function isAdminRole(role: UserRole): boolean {
   return role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN;
+}
+
+function resolveAuthOrigin(): string | undefined {
+  const explicitAuthOrigin = toOrigin(process.env.AUTH_URL ?? process.env.NEXTAUTH_URL);
+  const publicAppOrigin = toOrigin(env.NEXT_PUBLIC_APP_URL);
+  const vercelOrigin = toOrigin(
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined
+  );
+
+  if (env.NODE_ENV !== "production") {
+    return explicitAuthOrigin ?? publicAppOrigin;
+  }
+
+  const productionOrigin = [explicitAuthOrigin, publicAppOrigin, vercelOrigin].find(
+    (origin) => origin && !isLocalOrigin(origin)
+  );
+
+  if (productionOrigin) {
+    return productionOrigin;
+  }
+
+  if (explicitAuthOrigin && isLocalOrigin(explicitAuthOrigin)) {
+    delete process.env.AUTH_URL;
+    delete process.env.NEXTAUTH_URL;
+  }
+
+  return undefined;
+}
+
+function toOrigin(value: string | undefined): string | undefined {
+  if (!value?.trim()) {
+    return undefined;
+  }
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function isLocalOrigin(origin: string): boolean {
+  const hostname = new URL(origin).hostname;
+
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
 }
