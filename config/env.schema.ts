@@ -151,7 +151,7 @@ export const serverEnvSchema = publicEnvSchema.extend({
   RESEND_FROM_EMAIL: stringWithDefault("Hearts & Beans <orders@heartsandbeans.in>"),
   RESEND_AUDIENCE_ID: optionalCredential(),
   
-  // META DIRECT CLOUD WHATSAPP API (Replaces WATI keys)
+  // META DIRECT CLOUD WHATSAPP API (Replaces WATI)
   META_WA_ACCESS_TOKEN: optionalCredential(),
   META_WA_PHONE_NUMBER_ID: optionalCredential(),
 
