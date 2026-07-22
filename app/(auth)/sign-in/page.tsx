@@ -368,6 +368,8 @@ function getAuthErrorMessage(errorCode: string): string {
       return "Google sign-in is not reachable right now. Please use an email code while the connection is checked.";
     case "Verification":
       return "That sign-in link is invalid or expired. Please request a fresh email code.";
+    case "unauthorized_admin":
+      return "Please sign in with an administrator account to access the control center.";
     default:
       return "Sign in failed. Please try again or use an email code.";
   }

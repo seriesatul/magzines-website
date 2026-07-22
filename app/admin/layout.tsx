@@ -16,7 +16,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps): Promi
     !session?.user ||
     (session.user.role !== UserRole.ADMIN && session.user.role !== UserRole.SUPER_ADMIN)
   ) {
-    redirect("/sign-in?error=unauthorized_admin");
+    redirect("/sign-in?mode=admin&callbackUrl=/admin&error=unauthorized_admin");
   }
 
   return (

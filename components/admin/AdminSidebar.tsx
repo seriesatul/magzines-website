@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
+import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Session } from "next-auth";
+import type { Session } from "next-auth";
 import {
   LayoutDashboard,
   ClipboardList,
@@ -48,6 +49,8 @@ const NAV_ITEMS = [
 export function AdminSidebar({ session }: AdminSidebarProps): React.JSX.Element {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenu] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const adminName = session.user?.name || session.user?.email || "Administrator";
 
   const isActiveRoute = (href: string) => {
     if (href === "/admin") {
@@ -56,8 +59,15 @@ export function AdminSidebar({ session }: AdminSidebarProps): React.JSX.Element 
     return pathname.startsWith(href);
   };
 
-  const handleLogout = () => {
-    signOut({ callbackUrl: "/sign-in" });
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    clearBrowserStorage();
+
+    try {
+      await signOut({ redirectTo: "/" });
+    } catch {
+      window.location.assign("/");
+    }
   };
 
   const SidebarContent = () => (
@@ -82,7 +92,7 @@ export function AdminSidebar({ session }: AdminSidebarProps): React.JSX.Element 
           return (
             <Link
               key={item.href}
-              href={item.href as any}
+              href={item.href as Route}
               onClick={() => setIsMobileMenu(false)}
               className={`flex h-8 items-center gap-2.5 border-l-2 px-3 text-[10px] uppercase tracking-wider font-bold transition duration-150 rounded-none ${
                 active
@@ -119,10 +129,12 @@ export function AdminSidebar({ session }: AdminSidebarProps): React.JSX.Element 
 
         <button
           onClick={handleLogout}
+          disabled={isLoggingOut}
+          aria-label={`Logout ${adminName}`}
           className="flex h-8 w-full items-center justify-center gap-2 border border-stone-800 bg-stone-900 text-[10px] uppercase font-bold tracking-widest text-stone-400 hover:bg-red-950/80 hover:text-red-200 rounded-none transition duration-150"
         >
           <LogOut className="h-3 w-3" />
-          Logout Session
+          {isLoggingOut ? "Clearing Session" : "Logout Session"}
         </button>
       </div>
 
@@ -168,4 +180,16 @@ export function AdminSidebar({ session }: AdminSidebarProps): React.JSX.Element 
       )}
     </>
   );
+}
+
+function clearBrowserStorage(): void {
+  try {
+    window.localStorage.clear();
+  } catch {
+  }
+
+  try {
+    window.sessionStorage.clear();
+  } catch {
+  }
 }
