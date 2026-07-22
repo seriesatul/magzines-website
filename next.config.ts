@@ -74,9 +74,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "**.r2.cloudflarestorage.com"
       },
+      // Corrected: Standard, valid Next.js wildcard whitelisting all .r2.dev subdomains
       {
         protocol: "https",
-        hostname: "pub-*.r2.dev"
+        hostname: "*.r2.dev"
       },
       {
         protocol: "https",
