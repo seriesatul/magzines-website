@@ -1,7 +1,9 @@
 import React from "react";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { Globe2, Mail, MessageCircle, Save, Settings, Truck, Wallet, UploadCloud } from "lucide-react";
 import { env } from "@/config/env";
+import { AdminSettingsToast } from "@/components/admin/AdminSettingsToast";
 import { SettingFieldInput } from "@/components/admin/SettingFieldInput";
 import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
@@ -120,7 +122,17 @@ const STRING_SETTING_KEYS = [
 type StringSettingKey = (typeof STRING_SETTING_KEYS)[number];
 type SettingRow = Awaited<ReturnType<typeof getSettingRow>>;
 
-export default async function AdminSettingsPage(): Promise<React.JSX.Element> {
+type AdminSettingsPageProps = Readonly<{
+  searchParams: Promise<{
+    settingsSave?: string;
+    message?: string;
+  }>;
+}>;
+
+export default async function AdminSettingsPage({
+  searchParams
+}: AdminSettingsPageProps): Promise<React.JSX.Element> {
+  const { settingsSave, message } = await searchParams;
   const [settingRow, resolvedSettings] = await Promise.all([
     getSettingRow(),
     getResolvedSettings()
@@ -168,15 +180,25 @@ export default async function AdminSettingsPage(): Promise<React.JSX.Element> {
       revalidatePath("/cart");
       revalidatePath("/", "layout");
     } catch (error) {
+      const failureMessage = getSettingsSaveFailureMessage(error);
+
       logger.error(
         { error: error instanceof Error ? error.message : String(error) },
         "Secure settings save failed"
       );
+
+      redirect(`/admin/settings?settingsSave=failed&message=${encodeURIComponent(failureMessage)}`);
     }
+
+    redirect("/admin/settings?settingsSave=success");
   }
+
+  const toastStatus = getToastStatus(settingsSave);
 
   return (
     <div className="space-y-10">
+      <AdminSettingsToast status={toastStatus} message={message} />
+
       <div className="border-b border-stone-200 pb-8">
         <div className="mb-4 flex items-center gap-3 text-brand">
           <Settings className="h-4 w-4" />
@@ -377,4 +399,26 @@ function resolveNullableString(formData: FormData, name: string): string | null 
 function formatPaiseAsRupees(paise: number): string {
   const rupees = paise / 100;
   return Number.isInteger(rupees) ? String(rupees) : rupees.toFixed(2);
+}
+
+function getToastStatus(status: string | undefined): "success" | "failed" | undefined {
+  if (status === "success" || status === "failed") {
+    return status;
+  }
+
+  return undefined;
+}
+
+function getSettingsSaveFailureMessage(error: unknown): string {
+  if (error instanceof Error && isSettingsValidationMessage(error.message)) {
+    return error.message;
+  }
+
+  return "Settings could not be saved. Please review the form and try again.";
+}
+
+function isSettingsValidationMessage(message: string): boolean {
+  return message.endsWith("must be a positive rupee amount.") ||
+    message.endsWith("must be a positive integer.") ||
+    message.endsWith("must be greater than zero.");
 }
