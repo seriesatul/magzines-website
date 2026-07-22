@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { getProviders, signIn } from "next-auth/react";
 import { ArrowRight, KeyRound, Lock, Mail, ShieldCheck, ShoppingBag } from "lucide-react";
 
 type LoginMode = "customer" | "admin";
@@ -22,16 +23,20 @@ export default function SignInPage(): React.JSX.Element {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isGoogleAvailable, setIsGoogleAvailable] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const requestedMode = params.get("mode");
     const requestedCallbackUrl = params.get("callbackUrl");
-    const safeCallbackUrl = requestedCallbackUrl?.startsWith("/")
-      ? requestedCallbackUrl
-      : "/account";
+    const signInError = params.get("error");
+    const safeCallbackUrl = getSafeCallbackUrl(requestedCallbackUrl);
 
     setCallbackUrl(safeCallbackUrl);
+
+    if (signInError) {
+      setError(getAuthErrorMessage(signInError));
+    }
 
     if (requestedMode === "admin" || safeCallbackUrl.startsWith("/admin")) {
       setLoginMode("admin");
@@ -39,14 +44,39 @@ export default function SignInPage(): React.JSX.Element {
     }
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    getProviders()
+      .then((providers) => {
+        if (isMounted) {
+          setIsGoogleAvailable(Boolean(providers?.google));
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setIsGoogleAvailable(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   async function handleGoogleSignIn(): Promise<void> {
     setError(null);
     setMessage(null);
     setIsSubmitting(true);
 
-    await signIn("google", {
-      callbackUrl
-    });
+    try {
+      await signIn("google", {
+        redirectTo: callbackUrl
+      });
+    } catch {
+      setError("Google sign-in could not be started. Please try again or use an email code.");
+      setIsSubmitting(false);
+    }
   }
 
   async function requestOtp(cleanEmail: string): Promise<void> {
@@ -76,6 +106,7 @@ export default function SignInPage(): React.JSX.Element {
     const result = await signIn("otp", {
       email: cleanEmail,
       otp: cleanOtp,
+      redirectTo: callbackUrl,
       redirect: false
     });
 
@@ -83,7 +114,7 @@ export default function SignInPage(): React.JSX.Element {
       throw new Error("The verification code is invalid or expired.");
     }
 
-    router.push(callbackUrl as any);
+    router.push(callbackUrl as Route);
     router.refresh();
   }
 
@@ -95,6 +126,7 @@ export default function SignInPage(): React.JSX.Element {
     const result = await signIn("credentials", {
       email: cleanEmail,
       password: password.trim(),
+      redirectTo: callbackUrl.startsWith("/admin") ? callbackUrl : "/admin",
       redirect: false
     });
 
@@ -102,7 +134,7 @@ export default function SignInPage(): React.JSX.Element {
       throw new Error("Invalid administrator email or password credentials.");
     }
 
-    router.push(callbackUrl.startsWith("/admin") ? (callbackUrl as any) : "/admin");
+    router.push(callbackUrl.startsWith("/admin") ? (callbackUrl as Route) : "/admin");
     router.refresh();
   }
 
@@ -177,12 +209,14 @@ export default function SignInPage(): React.JSX.Element {
           </h1>
           <p className="text-xs font-light leading-relaxed text-stone-500">
             {loginMode === "customer"
-              ? "Use Google or receive a 6-digit email code to access your client account."
+              ? isGoogleAvailable
+                ? "Use Google or receive a 6-digit email code to access your client account."
+                : "Receive a 6-digit email code to access your client account."
               : "Enter your administrator credentials to securely access the workshop panel."}
           </p>
         </div>
 
-        {loginMode === "customer" ? (
+        {loginMode === "customer" && isGoogleAvailable ? (
           <button
             type="button"
             onClick={handleGoogleSignIn}
@@ -194,7 +228,7 @@ export default function SignInPage(): React.JSX.Element {
           </button>
         ) : null}
 
-        {loginMode === "customer" ? (
+        {loginMode === "customer" && isGoogleAvailable ? (
           <div className="flex items-center gap-3 text-[0.68rem] font-medium uppercase tracking-[0.12em] text-stone-400">
             <span className="h-px flex-1 bg-stone-200" />
             Email code
@@ -322,6 +356,29 @@ export default function SignInPage(): React.JSX.Element {
       </div>
     </main>
   );
+}
+
+function getAuthErrorMessage(errorCode: string): string {
+  switch (errorCode) {
+    case "AccessDenied":
+      return "Google could not verify that email address. Please use a verified Google account or request an email code.";
+    case "OAuthAccountNotLinked":
+      return "That email is already registered with another sign-in method. Please use your email code once, then try Google again.";
+    case "Configuration":
+      return "Google sign-in is not reachable right now. Please use an email code while the connection is checked.";
+    case "Verification":
+      return "That sign-in link is invalid or expired. Please request a fresh email code.";
+    default:
+      return "Sign in failed. Please try again or use an email code.";
+  }
+}
+
+function getSafeCallbackUrl(callbackUrl: string | null): string {
+  if (!callbackUrl?.startsWith("/") || callbackUrl.startsWith("//")) {
+    return "/account";
+  }
+
+  return callbackUrl;
 }
 
 function getSubmitLabel(loginMode: LoginMode, isOtpSent: boolean, isSubmitting: boolean): string {

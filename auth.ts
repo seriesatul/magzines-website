@@ -3,9 +3,13 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { UserRole } from "@prisma/client";
 import Resend from "next-auth/providers/resend";
 import Credentials from "next-auth/providers/credentials";
-import Google from "next-auth/providers/google";
+import Google, { type GoogleProfile } from "next-auth/providers/google";
 import { env } from "@/config/env";
 import { db } from "@/server/db/client";
+
+const isGoogleConfigured =
+  env.AUTH_GOOGLE_ID.trim().length > 0 &&
+  env.AUTH_GOOGLE_SECRET.trim().length > 0;
 
 export const authConfig = {
   adapter: PrismaAdapter(db),
@@ -16,10 +20,33 @@ export const authConfig = {
       from: env.RESEND_FROM_EMAIL
     }),
 
-    Google({
-      clientId: env.AUTH_GOOGLE_ID,
-      clientSecret: env.AUTH_GOOGLE_SECRET
-    }),
+    ...(isGoogleConfigured
+      ? [
+          Google<GoogleProfile>({
+            clientId: env.AUTH_GOOGLE_ID,
+            clientSecret: env.AUTH_GOOGLE_SECRET,
+            allowDangerousEmailAccountLinking: true,
+            authorization: {
+              url: "https://accounts.google.com/o/oauth2/v2/auth",
+              params: {
+                scope: "openid profile email"
+              }
+            },
+            token: "https://oauth2.googleapis.com/token",
+            userinfo: "https://openidconnect.googleapis.com/v1/userinfo",
+            profile(profile) {
+              return {
+                id: profile.sub,
+                name: profile.name,
+                email: profile.email,
+                image: profile.picture,
+                role: UserRole.CUSTOMER,
+                emailVerified: profile.email_verified ? new Date() : null
+              };
+            }
+          })
+        ]
+      : []),
 
     // 2. Credentials Provider: Admin password login (Rule 6)
     Credentials({
@@ -135,15 +162,40 @@ export const authConfig = {
   },
   trustHost: env.AUTH_TRUST_HOST,
   pages: {
-    signIn: "/sign-in"
+    signIn: "/sign-in",
+    error: "/sign-in"
+  },
+  events: {
+    async signIn({ user, account, profile }) {
+      const email = user.email?.toLowerCase().trim();
+      const googleProfile = account?.provider === "google" ? (profile as GoogleProfile | undefined) : undefined;
+      const identityFilters = [
+        ...(user.id ? [{ id: user.id }] : []),
+        ...(email ? [{ email }] : [])
+      ];
+
+      if (identityFilters.length === 0) {
+        return;
+      }
+
+      await db.user.updateMany({
+        where: {
+          OR: identityFilters
+        },
+        data: {
+          lastLoginAt: new Date(),
+          deletedAt: null,
+          ...(googleProfile?.email_verified ? { emailVerified: new Date() } : {})
+        }
+      });
+    }
   },
   callbacks: {
-    async signIn({ user }) {
-      if (user?.id) {
-        await db.user.update({
-          where: { id: user.id },
-          data: { lastLoginAt: new Date() }
-        });
+    signIn({ account, profile }) {
+      if (account?.provider === "google") {
+        const googleProfile = profile as GoogleProfile | undefined;
+
+        return Boolean(googleProfile?.email && googleProfile.email_verified);
       }
 
       return true;
@@ -152,8 +204,8 @@ export const authConfig = {
     jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as any).role || UserRole.CUSTOMER;
-        token.phone = (user as any).phone || null;
+        token.role = user.role || UserRole.CUSTOMER;
+        token.phone = user.phone || null;
       }
       return token;
     },
