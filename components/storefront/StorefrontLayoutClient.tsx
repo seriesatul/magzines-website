@@ -62,10 +62,11 @@ export function StorefrontLayoutClient({
           <div className="flex items-center gap-3">
             <Link
               href="/sign-in"
-              className="hidden items-center gap-2 rounded border border-stone-200 px-3 py-2 text-sm font-medium text-stone-700 transition hover:border-brand hover:text-brand sm:inline-flex"
+              className="inline-flex h-10 w-10 items-center justify-center gap-2 border border-stone-200 text-sm font-medium text-stone-700 transition hover:border-brand hover:text-brand sm:w-auto sm:px-3 sm:py-2"
+              aria-label="Sign in"
             >
               <User className="h-4 w-4" aria-hidden="true" />
-              Sign in
+              <span className="sr-only sm:not-sr-only">Sign in</span>
             </Link>
             <Link
               href="/cart"
