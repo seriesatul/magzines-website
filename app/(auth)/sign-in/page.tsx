@@ -49,13 +49,25 @@ export default function SignInPage(): React.JSX.Element {
     }
 
     if (requestedMode === "admin" || safeCallbackUrl.startsWith("/admin")) {
+      const adminCallbackUrl = safeCallbackUrl.startsWith("/admin") ? safeCallbackUrl : "/admin";
       setLoginMode("admin");
-      setCallbackUrl(safeCallbackUrl.startsWith("/admin") ? safeCallbackUrl : "/admin");
+      setCallbackUrl(adminCallbackUrl);
+      router.prefetch(adminCallbackUrl as Route);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     let isMounted = true;
+    const params = new URLSearchParams(window.location.search);
+    const requestedMode = params.get("mode");
+    const requestedCallbackUrl = getSafeCallbackUrl(params.get("callbackUrl"));
+
+    if (requestedMode === "admin" || requestedCallbackUrl.startsWith("/admin")) {
+      setIsGoogleAvailable(false);
+      return () => {
+        isMounted = false;
+      };
+    }
 
     getProviders()
       .then((providers) => {
@@ -131,15 +143,17 @@ export default function SignInPage(): React.JSX.Element {
     router.refresh();
   }
 
-  async function handleAdminSignIn(cleanEmail: string): Promise<void> {
+  async function handleAdminSignIn(cleanEmail: string): Promise<never> {
     if (!password.trim()) {
       throw new Error("Please enter your administrator password.");
     }
 
+    const adminCallbackUrl = callbackUrl.startsWith("/admin") ? callbackUrl : "/admin";
+
     const result = await signIn("credentials", {
       email: cleanEmail,
       password: password.trim(),
-      redirectTo: callbackUrl.startsWith("/admin") ? callbackUrl : "/admin",
+      redirectTo: adminCallbackUrl,
       redirect: false
     });
 
@@ -147,8 +161,8 @@ export default function SignInPage(): React.JSX.Element {
       throw new Error(getCredentialsErrorMessage(result?.code, result?.error));
     }
 
-    router.push(callbackUrl.startsWith("/admin") ? (callbackUrl as Route) : "/admin");
-    router.refresh();
+    window.location.replace(adminCallbackUrl);
+    return new Promise<never>(() => undefined);
   }
 
   async function handleSubmit(event: React.FormEvent): Promise<void> {
