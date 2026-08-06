@@ -4,6 +4,7 @@ import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
 import { AdminMediaUploader } from "@/components/admin/AdminMediaUploader";
 import { Images, Link as LinkIcon, Save, Plus, Trash2 } from "lucide-react";
+import { SubmitButton } from "@/components/loading/SubmitButton";
 
 export const revalidate = 0;
 
@@ -155,17 +156,21 @@ export default async function AdminUploadImagesPage(): Promise<React.JSX.Element
                     <LinkIcon className="absolute left-3 top-3 h-4 w-4 text-stone-400" />
                   </div>
                   <div className="flex flex-col gap-3 sm:flex-row">
-                    <button className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand">
-                      <Save className="h-3.5 w-3.5" />
-                      Save Media
-                    </button>
-                    <button
-                      formAction={deleteBanner}
-                      className="inline-flex h-10 items-center justify-center gap-2 border border-red-900/30 bg-white px-5 text-[10px] font-bold uppercase tracking-widest text-red-800 transition hover:border-red-900 hover:bg-red-950 hover:text-white"
+                    <SubmitButton
+                      className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand disabled:cursor-wait disabled:bg-stone-600"
+                      icon={<Save className="h-3.5 w-3.5" />}
+                      pendingLabel="Saving..."
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      Save Media
+                    </SubmitButton>
+                    <SubmitButton
+                      formAction={deleteBanner}
+                      className="inline-flex h-10 items-center justify-center gap-2 border border-red-900/30 bg-white px-5 text-[10px] font-bold uppercase tracking-widest text-red-800 transition hover:border-red-900 hover:bg-red-950 hover:text-white disabled:cursor-wait disabled:border-red-900/20 disabled:text-red-900/50"
+                      icon={<Trash2 className="h-3.5 w-3.5" />}
+                      pendingLabel="Deleting..."
+                    >
                       Delete
-                    </button>
+                    </SubmitButton>
                   </div>
                 </div>
               </form>
@@ -203,10 +208,13 @@ export default async function AdminUploadImagesPage(): Promise<React.JSX.Element
                 <option value="false">Hidden</option>
               </select>
             </div>
-            <button className="flex h-11 w-full items-center justify-center gap-2 bg-stone-900 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand">
-              <Save className="h-3.5 w-3.5" />
+            <SubmitButton
+              className="flex h-11 w-full items-center justify-center gap-2 bg-stone-900 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand disabled:cursor-wait disabled:bg-stone-600"
+              icon={<Save className="h-3.5 w-3.5" />}
+              pendingLabel="Publishing..."
+            >
               Publish Media
-            </button>
+            </SubmitButton>
           </form>
         </div>
       </div>

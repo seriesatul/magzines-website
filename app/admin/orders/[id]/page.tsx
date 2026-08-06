@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import type { OrderStatus } from "@prisma/client";
 import { db } from "@/server/db/client";
 import { formatPaise } from "@/server/db/money";
+import { SubmitButton } from "@/components/loading/SubmitButton";
 import { logger } from "@/server/logger/logger";
 import {
   dispatchOrderStatusNotification,
@@ -570,12 +571,12 @@ export default async function AdminOrderDetailPage({
                 />
               </label>
 
-              <button
-                type="submit"
-                className="w-full h-11 bg-stone-900 hover:bg-brand text-white text-xs uppercase font-bold tracking-widest transition duration-200 rounded-none"
+              <SubmitButton
+                className="w-full h-11 bg-stone-900 hover:bg-brand text-white text-xs uppercase font-bold tracking-widest transition duration-200 rounded-none disabled:cursor-wait disabled:bg-stone-600"
+                pendingLabel="Updating..."
               >
                 Update Status
-              </button>
+              </SubmitButton>
             </form>
           </div>
 
@@ -609,12 +610,12 @@ export default async function AdminOrderDetailPage({
                 placeholder="Write private team comments, print layout approval notes, or status flags..."
                 className="w-full p-3 text-xs bg-[#FAFAF8] border border-stone-200 focus:outline-none focus:border-brand rounded-none resize-none font-light placeholder:text-stone-400 leading-5"
               />
-              <button
-                type="submit"
-                className="w-full h-9 bg-stone-900 hover:bg-brand text-white text-[10px] uppercase font-bold tracking-widest rounded-none transition duration-200"
+              <SubmitButton
+                className="w-full h-9 bg-stone-900 hover:bg-brand text-white text-[10px] uppercase font-bold tracking-widest rounded-none transition duration-200 disabled:cursor-wait disabled:bg-stone-600"
+                pendingLabel="Saving..."
               >
                 Save Comment
-              </button>
+              </SubmitButton>
             </form>
 
             {/* Log list */}

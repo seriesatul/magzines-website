@@ -4,6 +4,7 @@ import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
 import { Tag, Save, CheckCircle, XCircle, Percent, Plus } from "lucide-react";
 import { DiscountType } from "@prisma/client";
+import { SubmitButton } from "@/components/loading/SubmitButton";
 
 export const revalidate = 0; // Dynamic server component, always fetches fresh coupon ledger metrics
 
@@ -146,13 +147,13 @@ export default async function AdminCouponsPage(): Promise<React.JSX.Element> {
                       <option value="false">Deactivated</option>
                     </select>
 
-                    <button
-                      type="submit"
-                      className="h-9 px-3 bg-stone-900 hover:bg-brand text-white text-[10px] uppercase font-bold tracking-widest rounded-none transition"
+                    <SubmitButton
+                      className="h-9 px-3 bg-stone-900 hover:bg-brand text-white text-[10px] uppercase font-bold tracking-widest rounded-none transition disabled:cursor-wait disabled:bg-stone-600"
                       title="Update status"
+                      pendingLabel="Updating..."
                     >
                       Update
-                    </button>
+                    </SubmitButton>
 
                     <div className="flex items-center ml-1">
                       {coupon.isActive ? (
@@ -211,13 +212,13 @@ export default async function AdminCouponsPage(): Promise<React.JSX.Element> {
               />
             </label>
 
-            <button
-              type="submit"
-              className="w-full h-11 bg-stone-900 hover:bg-brand text-white text-xs uppercase font-bold tracking-widest flex items-center justify-center gap-2 rounded-none transition duration-200 border border-stone-800"
+            <SubmitButton
+              className="w-full h-11 bg-stone-900 hover:bg-brand text-white text-xs uppercase font-bold tracking-widest flex items-center justify-center gap-2 rounded-none transition duration-200 border border-stone-800 disabled:cursor-wait disabled:bg-stone-600"
+              icon={<Save className="h-3.5 w-3.5" />}
+              pendingLabel="Publishing..."
             >
-              <Save className="h-3.5 w-3.5" />
               Publish Code
-            </button>
+            </SubmitButton>
           </form>
         </div>
 

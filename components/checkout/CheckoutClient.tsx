@@ -23,6 +23,7 @@ import { formatPaise } from "@/server/db/money";
 import { INDIAN_STATES } from "@/server/validators/checkout";
 import type { PhotobookCartItem } from "@/types/photobook";
 import type { CheckoutSettings } from "@/lib/checkout-settings";
+import { LoadingMark } from "@/components/loading/LoadingMark";
 
 type RazorpayCheckoutResponse = {
   razorpay_order_id: string;
@@ -700,7 +701,14 @@ export function CheckoutClient({
               disabled={isSubmitting || selectablePaymentTypes.length === 0}
               className="inline-flex h-14 w-full items-center justify-center bg-stone-900 px-8 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand disabled:cursor-not-allowed disabled:bg-stone-300"
             >
-              {isSubmitting ? "Processing order..." : "Place order"}
+              {isSubmitting ? (
+                <span className="inline-flex items-center gap-2">
+                  <LoadingMark />
+                  Processing order...
+                </span>
+              ) : (
+                "Place order"
+              )}
             </button>
           </form>
 
@@ -1013,7 +1021,14 @@ function PostCheckoutSignupDialog({
                 disabled={isSendingOtp}
                 className="h-12 bg-stone-900 px-6 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand disabled:cursor-not-allowed disabled:bg-stone-300"
               >
-                {isSendingOtp ? "Sending..." : "Send Code"}
+                {isSendingOtp ? (
+                  <span className="inline-flex items-center gap-2">
+                    <LoadingMark />
+                    Sending...
+                  </span>
+                ) : (
+                  "Send Code"
+                )}
               </button>
             </div>
 
@@ -1035,7 +1050,14 @@ function PostCheckoutSignupDialog({
               disabled={isVerifyingOtp}
               className="flex h-12 w-full items-center justify-center bg-brand px-6 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-stone-900 disabled:cursor-not-allowed disabled:bg-stone-300"
             >
-              {isVerifyingOtp ? "Verifying..." : "Verify & Save"}
+              {isVerifyingOtp ? (
+                <span className="inline-flex items-center gap-2">
+                  <LoadingMark />
+                  Verifying...
+                </span>
+              ) : (
+                "Verify & Save"
+              )}
             </button>
 
             <button

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { Box, CheckCircle, ChevronDown, ExternalLink, Image as ImageIcon, Plus, Save, Trash2, XCircle } from "lucide-react";
 import { ProductImageUploader, type ProductImageUploaderItem } from "@/components/admin/ProductImageUploader";
+import { SubmitButton } from "@/components/loading/SubmitButton";
 import { db } from "@/server/db/client";
 import { formatPaise } from "@/server/db/money";
 import { logger } from "@/server/logger/logger";
@@ -328,21 +329,21 @@ export default async function AdminProductsPage(): Promise<React.JSX.Element> {
                         <ExternalLink className="h-3 w-3" />
                         Storefront
                       </Link>
-                      <button
-                        type="submit"
+                      <SubmitButton
                         formAction={archiveProduct}
-                        className="inline-flex h-10 items-center justify-center gap-2 border border-red-900/30 bg-white px-4 text-[10px] font-bold uppercase tracking-widest text-red-800 transition hover:border-red-950 hover:bg-red-950 hover:text-white rounded-none"
+                        className="inline-flex h-10 items-center justify-center gap-2 border border-red-900/30 bg-white px-4 text-[10px] font-bold uppercase tracking-widest text-red-800 transition hover:border-red-950 hover:bg-red-950 hover:text-white rounded-none disabled:cursor-wait disabled:border-red-900/20 disabled:text-red-900/50"
+                        icon={<Trash2 className="h-3.5 w-3.5" />}
+                        pendingLabel="Archiving..."
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
                         Archive
-                      </button>
-                      <button
-                        type="submit"
-                        className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-4 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand rounded-none"
+                      </SubmitButton>
+                      <SubmitButton
+                        className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-4 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand rounded-none disabled:cursor-wait disabled:bg-stone-600"
+                        icon={<Save className="h-3.5 w-3.5" />}
+                        pendingLabel="Saving..."
                       >
-                        <Save className="h-3.5 w-3.5" />
                         Save
-                      </button>
+                      </SubmitButton>
                     </div>
                   </div>
 

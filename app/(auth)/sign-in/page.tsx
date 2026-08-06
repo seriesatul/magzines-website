@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getProviders, signIn } from "next-auth/react";
 import { ArrowRight, KeyRound, Lock, Mail, ShieldCheck, ShoppingBag } from "lucide-react";
+import { toast } from "sonner";
+import { LoadingMark } from "@/components/loading/LoadingMark";
 
 type LoginMode = "customer" | "admin";
 
@@ -25,17 +27,25 @@ export default function SignInPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [isGoogleAvailable, setIsGoogleAvailable] = useState(false);
 
+  function showLoginError(message: string): void {
+    setError(message);
+    toast.error("Sign-in problem", {
+      description: message
+    });
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const requestedMode = params.get("mode");
     const requestedCallbackUrl = params.get("callbackUrl");
     const signInError = params.get("error");
+    const signInCode = params.get("code");
     const safeCallbackUrl = getSafeCallbackUrl(requestedCallbackUrl);
 
     setCallbackUrl(safeCallbackUrl);
 
     if (signInError) {
-      setError(getAuthErrorMessage(signInError));
+      showLoginError(getAuthErrorMessage(signInError, signInCode));
     }
 
     if (requestedMode === "admin" || safeCallbackUrl.startsWith("/admin")) {
@@ -74,7 +84,7 @@ export default function SignInPage(): React.JSX.Element {
         redirectTo: callbackUrl
       });
     } catch {
-      setError("Google sign-in could not be started. Please try again or use an email code.");
+      showLoginError("Google sign-in could not be started. Please try again or use an email code.");
       setIsSubmitting(false);
     }
   }
@@ -94,6 +104,9 @@ export default function SignInPage(): React.JSX.Element {
 
     setIsOtpSent(true);
     setMessage(`We sent a 6-digit code to ${cleanEmail}.`);
+    toast.success("Verification code sent", {
+      description: `Check ${cleanEmail} for your 6-digit code.`
+    });
   }
 
   async function verifyOtp(cleanEmail: string): Promise<void> {
@@ -131,7 +144,7 @@ export default function SignInPage(): React.JSX.Element {
     });
 
     if (result?.error || !result?.ok) {
-      throw new Error("Invalid administrator email or password credentials.");
+      throw new Error(getCredentialsErrorMessage(result?.code, result?.error));
     }
 
     router.push(callbackUrl.startsWith("/admin") ? (callbackUrl as Route) : "/admin");
@@ -159,11 +172,7 @@ export default function SignInPage(): React.JSX.Element {
         await requestOtp(cleanEmail);
       }
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Sign in failed. Please try again."
-      );
+      showLoginError(err instanceof Error ? err.message : "Sign in failed. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -223,8 +232,17 @@ export default function SignInPage(): React.JSX.Element {
             disabled={isSubmitting}
             className="flex h-12 w-full items-center justify-center gap-3 border border-stone-900 bg-white text-xs font-bold uppercase tracking-widest text-stone-900 transition duration-200 hover:bg-stone-900 hover:text-white disabled:border-stone-300 disabled:text-stone-400"
           >
-            <span className="font-serif text-base font-black">G</span>
-            Sign in with Google
+            {isSubmitting ? (
+              <>
+                <LoadingMark />
+                Opening Google...
+              </>
+            ) : (
+              <>
+                <span className="font-serif text-base font-black">G</span>
+                Sign in with Google
+              </>
+            )}
           </button>
         ) : null}
 
@@ -306,14 +324,16 @@ export default function SignInPage(): React.JSX.Element {
             disabled={isSubmitting}
             className="flex h-12 w-full items-center justify-center gap-2 bg-stone-900 text-xs font-bold uppercase tracking-widest text-white transition duration-200 hover:bg-brand disabled:bg-stone-300"
           >
-            {loginMode === "admin" ? (
+            {isSubmitting ? (
+              <LoadingMark />
+            ) : loginMode === "admin" ? (
               <Lock className="h-3.5 w-3.5" />
             ) : isOtpSent ? (
               <KeyRound className="h-3.5 w-3.5" />
             ) : (
               <Mail className="h-3.5 w-3.5" />
             )}
-            {getSubmitLabel(loginMode, isOtpSent, isSubmitting)}
+            <span>{getSubmitLabel(loginMode, isOtpSent, isSubmitting)}</span>
           </button>
         </form>
 
@@ -358,7 +378,11 @@ export default function SignInPage(): React.JSX.Element {
   );
 }
 
-function getAuthErrorMessage(errorCode: string): string {
+function getAuthErrorMessage(errorCode: string, code?: string | null): string {
+  if (errorCode === "CredentialsSignin") {
+    return getCredentialsErrorMessage(code ?? undefined, errorCode);
+  }
+
   switch (errorCode) {
     case "AccessDenied":
       return "Google could not verify that email address. Please use a verified Google account or request an email code.";
@@ -373,6 +397,14 @@ function getAuthErrorMessage(errorCode: string): string {
     default:
       return "Sign in failed. Please try again or use an email code.";
   }
+}
+
+function getCredentialsErrorMessage(code?: string, error?: string): string {
+  if (code === "login_service_unavailable" || error === "CallbackRouteError") {
+    return "Admin login is having trouble reaching the server. Please try again later; the issue has been logged.";
+  }
+
+  return "Invalid administrator email or password credentials.";
 }
 
 function getSafeCallbackUrl(callbackUrl: string | null): string {

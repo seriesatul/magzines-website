@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
 import { Layers3, Save, Plus } from "lucide-react";
+import { SubmitButton } from "@/components/loading/SubmitButton";
 
 export const revalidate = 0;
 
@@ -148,10 +149,13 @@ export default async function AdminContainersPage(): Promise<React.JSX.Element> 
                   <p className="text-[10px] uppercase tracking-wider text-stone-400">
                     {container.contentIds.map((id) => contentLookup.get(id) || id).join(" / ") || "No content selected"}
                   </p>
-                  <button className="inline-flex h-10 items-center gap-2 bg-stone-900 px-5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand">
-                    <Save className="h-3.5 w-3.5" />
+                  <SubmitButton
+                    className="inline-flex h-10 items-center gap-2 bg-stone-900 px-5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand disabled:cursor-wait disabled:bg-stone-600"
+                    icon={<Save className="h-3.5 w-3.5" />}
+                    pendingLabel="Saving..."
+                  >
                     Save
-                  </button>
+                  </SubmitButton>
                 </div>
               </form>
             ))
@@ -186,10 +190,13 @@ export default async function AdminContainersPage(): Promise<React.JSX.Element> 
                 </label>
               ))}
             </div>
-            <button className="flex h-11 w-full items-center justify-center gap-2 bg-stone-900 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand">
-              <Save className="h-3.5 w-3.5" />
+            <SubmitButton
+              className="flex h-11 w-full items-center justify-center gap-2 bg-stone-900 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand disabled:cursor-wait disabled:bg-stone-600"
+              icon={<Save className="h-3.5 w-3.5" />}
+              pendingLabel="Creating..."
+            >
               Create Container
-            </button>
+            </SubmitButton>
           </form>
         </div>
       </div>

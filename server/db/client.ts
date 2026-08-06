@@ -14,6 +14,7 @@ function getDatabaseUrlWithConnectionLimit(): string | undefined {
 
   try {
     const url = new URL(databaseUrl);
+    normalizeSupabasePoolerUrl(url);
 
     if (!url.searchParams.has("connection_limit")) {
       url.searchParams.set("connection_limit", "1");
@@ -26,6 +27,16 @@ function getDatabaseUrlWithConnectionLimit(): string | undefined {
     return url.toString();
   } catch {
     return databaseUrl;
+  }
+}
+
+function normalizeSupabasePoolerUrl(url: URL): void {
+  if (
+    url.hostname.endsWith(".pooler.supabase.com") &&
+    url.port === "5432" &&
+    url.searchParams.get("pgbouncer") === "true"
+  ) {
+    url.port = "6543";
   }
 }
 

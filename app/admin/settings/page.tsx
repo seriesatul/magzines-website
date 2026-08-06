@@ -5,6 +5,7 @@ import { Globe2, Mail, MessageCircle, Save, Settings, Truck, Wallet, UploadCloud
 import { env } from "@/config/env";
 import { AdminSettingsToast } from "@/components/admin/AdminSettingsToast";
 import { SettingFieldInput } from "@/components/admin/SettingFieldInput";
+import { SubmitButton } from "@/components/loading/SubmitButton";
 import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
 import { GLOBAL_SETTING_ID, getResolvedSettings, type DynamicSettingKey } from "@/server/services/settings";
@@ -259,10 +260,13 @@ export default async function AdminSettingsPage({
           );
         })}
 
-        <button className="inline-flex h-12 items-center gap-2 bg-stone-900 px-8 text-xs font-medium uppercase tracking-[0.12em] text-white transition hover:bg-brand">
-          <Save className="h-4 w-4" />
+        <SubmitButton
+          className="inline-flex h-12 items-center gap-2 bg-stone-900 px-8 text-xs font-medium uppercase tracking-[0.12em] text-white transition hover:bg-brand disabled:cursor-wait disabled:bg-stone-600"
+          icon={<Save className="h-4 w-4" />}
+          pendingLabel="Saving Settings..."
+        >
           Save Settings
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

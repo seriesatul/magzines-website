@@ -2,6 +2,7 @@ import React from "react";
 import { revalidatePath } from "next/cache";
 import { db } from "@/server/db/client";
 import { formatPaise } from "@/server/db/money";
+import { SubmitButton } from "@/components/loading/SubmitButton";
 import { sendWhatsAppTemplate } from "@/server/services/whatsapp";
 import { env } from "@/config/env";
 import { logger } from "@/server/logger/logger";
@@ -181,7 +182,7 @@ export default async function AdminAbandonedCartsPage(): Promise<React.JSX.Eleme
                         {cart.items.map((item: any) => (
                           <div key={item.id} className="truncate">
                             <span className="font-semibold text-stone-900">{item.productName}</span>
-                            <span className="text-stone-400 font-mono ml-1.5">× {item.quantity}</span>
+                            <span className="text-stone-400 font-mono ml-1.5">ÃƒÆ’Ã¢â‚¬â€ {item.quantity}</span>
                           </div>
                         ))}
                       </td>
@@ -196,31 +197,33 @@ export default async function AdminAbandonedCartsPage(): Promise<React.JSX.Eleme
                           {cart.customerPhone && (
                             <form action={triggerWhatsAppRecovery}>
                               <input type="hidden" name="cartId" value={cart.id} />
-                              <button
-                                type="submit"
-                                className={`h-9 px-4 text-[10px] uppercase font-bold tracking-widest flex items-center gap-1.5 rounded-none border transition duration-150 ${
+                              <SubmitButton
+                                className={`h-9 px-4 text-[10px] uppercase font-bold tracking-widest flex items-center gap-1.5 rounded-none border transition duration-150 disabled:cursor-wait ${
                                   hasBeenNotified
                                     ? "bg-stone-50 border-stone-200 text-stone-400 hover:bg-stone-100 hover:text-stone-600"
                                     : "bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-700"
                                 }`}
                                 title={hasBeenNotified ? "Recovery notification already sent" : "Dispatch WhatsApp Recovery link"}
+                                icon={<Send className="h-3 w-3" />}
+                                pendingLabel="Sending..."
                               >
-                                <Send className="h-3 w-3" />
                                 {hasBeenNotified ? "Resend" : "Recover via WA"}
-                              </button>
+                              </SubmitButton>
                             </form>
                           )}
 
                           {/* 2. Mark Recovered manually */}
                           <form action={markCartAsRecovered}>
                             <input type="hidden" name="cartId" value={cart.id} />
-                            <button
-                              type="submit"
-                              className="h-9 px-4 border border-stone-300 bg-white hover:border-brand hover:text-brand text-stone-900 text-[10px] uppercase font-bold tracking-widest rounded-none transition duration-150"
+                            <SubmitButton
+                              className="h-9 px-4 border border-stone-300 bg-white hover:border-brand hover:text-brand text-stone-900 text-[10px] uppercase font-bold tracking-widest rounded-none transition duration-150 disabled:cursor-wait disabled:text-stone-400"
                               title="Flag as manually recovered"
+                              icon={<CheckSquare className="h-3.5 w-3.5" />}
+                              pendingLabel="Saving..."
+                              aria-label="Flag as manually recovered"
                             >
-                              <CheckSquare className="h-3.5 w-3.5" />
-                            </button>
+                              <span className="sr-only">Mark recovered</span>
+                            </SubmitButton>
                           </form>
                         </div>
                       </td>

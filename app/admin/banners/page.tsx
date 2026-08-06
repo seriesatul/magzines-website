@@ -4,6 +4,7 @@ import { ImageIcon, Link as LinkIcon, Plus, Save, SlidersHorizontal, Trash2 } fr
 import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
 import { AdminBannerUploader } from "@/components/admin/AdminBannerUploader";
+import { SubmitButton } from "@/components/loading/SubmitButton";
 
 export const revalidate = 0;
 
@@ -213,17 +214,21 @@ export default async function AdminBannersPage(): Promise<React.JSX.Element> {
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row">
-                    <button className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand rounded-none">
-                      <Save className="h-3.5 w-3.5" />
-                      Save Banner
-                    </button>
-                    <button
-                      formAction={deleteBanner}
-                      className="inline-flex h-10 items-center justify-center gap-2 border border-red-900/30 bg-white px-5 text-[10px] font-bold uppercase tracking-widest text-red-800 transition hover:border-red-900 hover:bg-red-950 hover:text-white rounded-none"
+                    <SubmitButton
+                      className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand rounded-none disabled:cursor-wait disabled:bg-stone-600"
+                      icon={<Save className="h-3.5 w-3.5" />}
+                      pendingLabel="Saving..."
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      Save Banner
+                    </SubmitButton>
+                    <SubmitButton
+                      formAction={deleteBanner}
+                      className="inline-flex h-10 items-center justify-center gap-2 border border-red-900/30 bg-white px-5 text-[10px] font-bold uppercase tracking-widest text-red-800 transition hover:border-red-900 hover:bg-red-950 hover:text-white rounded-none disabled:cursor-wait disabled:border-red-900/20 disabled:text-red-900/50"
+                      icon={<Trash2 className="h-3.5 w-3.5" />}
+                      pendingLabel="Deleting..."
+                    >
                       Delete
-                    </button>
+                    </SubmitButton>
                   </div>
                 </div>
               </form>
@@ -289,10 +294,13 @@ export default async function AdminBannersPage(): Promise<React.JSX.Element> {
                 className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs font-mono outline-none transition focus:border-brand rounded-none"
               />
             </label>
-            <button className="flex h-11 w-full items-center justify-center gap-2 bg-stone-900 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand rounded-none">
-              <ImageIcon className="h-3.5 w-3.5" />
+            <SubmitButton
+              className="flex h-11 w-full items-center justify-center gap-2 bg-stone-900 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand rounded-none disabled:cursor-wait disabled:bg-stone-600"
+              icon={<ImageIcon className="h-3.5 w-3.5" />}
+              pendingLabel="Publishing..."
+            >
               Publish Banner
-            </button>
+            </SubmitButton>
           </form>
         </aside>
       </div>

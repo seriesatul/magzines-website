@@ -10,6 +10,7 @@ import { formatPaise } from "@/server/db/money";
 import { RevealOnScroll } from "@/components/storefront/RevealOnScroll";
 import { useCart } from "@/components/storefront/CartProvider";
 import { type PhotobookCartItem } from "@/types/photobook";
+import { LoadingMark } from "@/components/loading/LoadingMark";
 
 const FALLBACK_PRODUCT_IMAGE =
   "https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=1200&q=80";
@@ -506,7 +507,10 @@ export function ProductDetailClient({ product }: ProductDetailClientProps): Reac
                     {isOutOfStock ? (
                       "Out of Stock"
                     ) : isPlacingOrder ? (
-                      "Opening Checkout..."
+                      <>
+                        <LoadingMark />
+                        Opening Checkout...
+                      </>
                     ) : (
                       <>
                         Place order
@@ -527,7 +531,10 @@ export function ProductDetailClient({ product }: ProductDetailClientProps): Reac
                     }`}
                   >
                     {isAdding ? (
-                      "Adding..."
+                      <>
+                        <LoadingMark />
+                        Adding...
+                      </>
                     ) : addSuccess ? (
                       <>
                         <Check className="h-4 w-4" />

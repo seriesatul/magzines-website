@@ -4,6 +4,7 @@ import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
 import { UserRole } from "@prisma/client";
 import { Shield, Save, Plus, Trash2 } from "lucide-react";
+import { SubmitButton } from "@/components/loading/SubmitButton";
 
 export const revalidate = 0;
 
@@ -103,10 +104,13 @@ export default async function AdminManageAdminPage(): Promise<React.JSX.Element>
                   <option value="REMOVED">Removed</option>
                 </select>
               </label>
-              <button className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-4 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand">
-                <Save className="h-3.5 w-3.5" />
+              <SubmitButton
+                className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-4 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand disabled:cursor-wait disabled:bg-stone-600"
+                icon={<Save className="h-3.5 w-3.5" />}
+                pendingLabel="Saving..."
+              >
                 Save
-              </button>
+              </SubmitButton>
             </form>
           ))}
         </div>
@@ -128,10 +132,13 @@ export default async function AdminManageAdminPage(): Promise<React.JSX.Element>
               <Trash2 className="mb-3 h-4 w-4 text-brand" />
               Admin sign-in still depends on the configured auth providers. This page grants the role/access once that email signs in or exists.
             </div>
-            <button className="flex h-11 w-full items-center justify-center gap-2 bg-stone-900 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand">
-              <Save className="h-3.5 w-3.5" />
+            <SubmitButton
+              className="flex h-11 w-full items-center justify-center gap-2 bg-stone-900 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand disabled:cursor-wait disabled:bg-stone-600"
+              icon={<Save className="h-3.5 w-3.5" />}
+              pendingLabel="Granting..."
+            >
               Grant Access
-            </button>
+            </SubmitButton>
           </form>
         </div>
       </div>

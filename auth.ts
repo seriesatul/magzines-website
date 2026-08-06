@@ -1,4 +1,4 @@
-import NextAuth, { type NextAuthConfig } from "next-auth";
+import NextAuth, { CredentialsSignin, type NextAuthConfig } from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { UserRole } from "@prisma/client";
 import Resend from "next-auth/providers/resend";
@@ -6,6 +6,11 @@ import Credentials from "next-auth/providers/credentials";
 import Google, { type GoogleProfile } from "next-auth/providers/google";
 import { env } from "@/config/env";
 import { db } from "@/server/db/client";
+import { logger } from "@/server/logger/logger";
+
+class AdminLoginServiceUnavailableError extends CredentialsSignin {
+  override code = "login_service_unavailable";
+}
 
 const isGoogleConfigured =
   env.AUTH_GOOGLE_ID.trim().length > 0 &&
@@ -73,21 +78,26 @@ export const authConfig = {
 
         if (emailInput === adminEmail && passwordInput === adminPassword) {
           // Fetch or automatically generate the administrator account in the DB
-          let user = await db.user.findUnique({
-            where: { email: emailInput }
-          });
-
-          if (!user) {
-            user = await db.user.create({
-              data: {
-                email: emailInput,
-                name: "Hearts & Beans Admin",
-                role: UserRole.ADMIN
-              }
+          try {
+            let user = await db.user.findUnique({
+              where: { email: emailInput }
             });
-          }
 
-          return user;
+            if (!user) {
+              user = await db.user.create({
+                data: {
+                  email: emailInput,
+                  name: "Hearts & Beans Admin",
+                  role: UserRole.ADMIN
+                }
+              });
+            }
+
+            return user;
+          } catch (error) {
+            reportAdminLoginFailure(error, emailInput);
+            throw new AdminLoginServiceUnavailableError();
+          }
         }
 
         // Return null if credentials mismatch
@@ -185,16 +195,23 @@ export const authConfig = {
         return;
       }
 
-      await db.user.updateMany({
-        where: {
-          OR: identityFilters
-        },
-        data: {
-          lastLoginAt: new Date(),
-          deletedAt: null,
-          ...(googleProfile?.email_verified ? { emailVerified: new Date() } : {})
-        }
-      });
+      try {
+        await db.user.updateMany({
+          where: {
+            OR: identityFilters
+          },
+          data: {
+            lastLoginAt: new Date(),
+            deletedAt: null,
+            ...(googleProfile?.email_verified ? { emailVerified: new Date() } : {})
+          }
+        });
+      } catch (error) {
+        logger.error(
+          { error, email: email ? maskEmail(email) : undefined },
+          "Failed to update auth login metadata"
+        );
+      }
     }
   },
   callbacks: {
@@ -277,4 +294,21 @@ function isLocalOrigin(origin: string): boolean {
   const hostname = new URL(origin).hostname;
 
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+function reportAdminLoginFailure(error: unknown, email: string): void {
+  logger.error(
+    { error, email: maskEmail(email) },
+    "Admin credentials login failed because the auth service could not reach its backend"
+  );
+}
+
+function maskEmail(email: string): string {
+  const [localPart = "", domain = ""] = email.split("@");
+
+  if (!domain) {
+    return "unknown";
+  }
+
+  const visiblePrefix = localPart.slice(0, 2);
+  return `${visiblePrefix}${"*".repeat(Math.max(localPart.length - 2, 3))}@${domain}`;
 }

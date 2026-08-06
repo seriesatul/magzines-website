@@ -8,6 +8,7 @@ import {
 import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
 import { Shapes, Save, Plus, Image as ImageIcon, Trash2 } from "lucide-react";
+import { SubmitButton } from "@/components/loading/SubmitButton";
 
 export const revalidate = 0;
 
@@ -285,18 +286,21 @@ export default async function AdminCategoriesPage(): Promise<React.JSX.Element> 
                       {category._count.products} products assigned - delete detaches products first
                     </p>
                     <div className="flex flex-col gap-2 sm:flex-row">
-                      <button
-                        type="submit"
+                      <SubmitButton
                         formAction={deleteCategory}
-                        className="inline-flex h-10 items-center justify-center gap-2 border border-red-900/30 bg-white px-5 text-[10px] font-bold uppercase tracking-widest text-red-800 transition hover:border-red-950 hover:bg-red-950 hover:text-white"
+                        className="inline-flex h-10 items-center justify-center gap-2 border border-red-900/30 bg-white px-5 text-[10px] font-bold uppercase tracking-widest text-red-800 transition hover:border-red-950 hover:bg-red-950 hover:text-white disabled:cursor-wait disabled:border-red-900/20 disabled:text-red-900/50"
+                        icon={<Trash2 className="h-3.5 w-3.5" />}
+                        pendingLabel="Deleting..."
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
                         Delete
-                      </button>
-                      <button className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand">
-                        <Save className="h-3.5 w-3.5" />
+                      </SubmitButton>
+                      <SubmitButton
+                        className="inline-flex h-10 items-center justify-center gap-2 bg-stone-900 px-5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand disabled:cursor-wait disabled:bg-stone-600"
+                        icon={<Save className="h-3.5 w-3.5" />}
+                        pendingLabel="Saving..."
+                      >
                         Save Category
-                      </button>
+                      </SubmitButton>
                     </div>
                   </div>
                 </div>
@@ -340,10 +344,13 @@ export default async function AdminCategoriesPage(): Promise<React.JSX.Element> 
             </select>
             <textarea name="description" rows={4} placeholder="Describe what the customer is choosing..." className="w-full border border-stone-200 bg-[#FAFAF8] px-4 py-3 text-xs leading-6 outline-none focus:border-brand" />
             <CategoryProductPicker products={productPickerItems} title="Add Products" />
-            <button className="flex h-11 w-full items-center justify-center gap-2 bg-stone-900 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand">
-              <Save className="h-3.5 w-3.5" />
+            <SubmitButton
+              className="flex h-11 w-full items-center justify-center gap-2 bg-stone-900 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand disabled:cursor-wait disabled:bg-stone-600"
+              icon={<Save className="h-3.5 w-3.5" />}
+              pendingLabel="Creating..."
+            >
               Create Category
-            </button>
+            </SubmitButton>
           </form>
         </div>
       </div>

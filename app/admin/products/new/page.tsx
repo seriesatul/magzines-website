@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { ArrowLeft, Save, Sparkles } from "lucide-react";
 import { ProductImageUploader } from "@/components/admin/ProductImageUploader";
+import { SubmitButton } from "@/components/loading/SubmitButton";
 import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
 import { parseProductForm, parseProductImages } from "../product-form";
@@ -302,13 +303,13 @@ export default async function NewProductPage(): Promise<React.JSX.Element> {
             </label>
           </div>
 
-          <button
-            type="submit"
-            className="inline-flex h-12 w-full items-center justify-center gap-2 bg-stone-900 px-6 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand rounded-none"
+          <SubmitButton
+            className="inline-flex h-12 w-full items-center justify-center gap-2 bg-stone-900 px-6 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand rounded-none disabled:cursor-wait disabled:bg-stone-600"
+            icon={<Save className="h-3.5 w-3.5" />}
+            pendingLabel="Creating Product..."
           >
-            <Save className="h-3.5 w-3.5" />
             Create Product
-          </button>
+          </SubmitButton>
         </aside>
       </form>
     </div>

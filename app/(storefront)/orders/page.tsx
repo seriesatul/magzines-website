@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, ShoppingBag } from "lucide-react";
 import Link from "next/link";
+import { LoadingMark } from "@/components/loading/LoadingMark";
 
 export default function OrderLookupPage(): React.JSX.Element {
   const router = useRouter();
@@ -101,8 +102,8 @@ export default function OrderLookupPage(): React.JSX.Element {
             disabled={isValidating}
             className="w-full h-12 bg-stone-900 hover:bg-brand text-white text-xs uppercase font-bold tracking-widest flex items-center justify-center gap-2 rounded-none transition duration-200 disabled:bg-stone-300"
           >
-            <Search className="h-3.5 w-3.5" />
-            {isValidating ? "Searching..." : "Track progress"}
+            {isValidating ? <LoadingMark /> : <Search className="h-3.5 w-3.5" />}
+            <span>{isValidating ? "Searching..." : "Track progress"}</span>
           </button>
         </form>
 

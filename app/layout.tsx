@@ -1,6 +1,9 @@
+import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { siteConfig } from "@/config/site";
+import { ToastProvider } from "@/components/ToastProvider";
+import { NavigationLoadingIndicator } from "@/components/loading/NavigationLoadingIndicator";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
@@ -49,8 +52,13 @@ export default function RootLayout({ children }: RootLayoutProps): React.JSX.Ele
         />
       </head>
       <body className="bg-stone-50 font-sans text-stone-900 antialiased selection:bg-brand/10 selection:text-brand">
+        <Suspense fallback={null}>
+          <NavigationLoadingIndicator />
+        </Suspense>
         {children}
+        <ToastProvider />
       </body>
     </html>
   );
 }
+

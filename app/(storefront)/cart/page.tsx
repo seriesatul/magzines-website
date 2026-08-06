@@ -7,10 +7,11 @@ import { Minus, Plus, ShoppingBag, Trash2, Tag, Percent } from "lucide-react";
 import { useCart } from "@/components/storefront/CartProvider";
 import { formatPaise } from "@/server/db/money";
 import type { PhotobookCartItem } from "@/types/photobook";
+import { LoadingMark } from "@/components/loading/LoadingMark";
 
 // Standard Indian shipping rules in Paise (Rule 2)
-const FREE_SHIPPING_THRESHOLD_PAISE = 99900; // ₹999
-const DEFAULT_SHIPPING_FEE_PAISE = 12000;     // ₹120
+const FREE_SHIPPING_THRESHOLD_PAISE = 99900; // ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹999
+const DEFAULT_SHIPPING_FEE_PAISE = 12000;     // ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹120
 
 export default function CartPage(): React.JSX.Element {
   const { items, updateQuantity, removeItem, subtotalPaise, clearCart } = useCart();
@@ -166,7 +167,7 @@ export default function CartPage(): React.JSX.Element {
                     </span>
                   ) : (
                     <span className="text-emerald-700 font-semibold flex items-center gap-1.5">
-                      Yay! You unlocked FREE shipping on this order 🎉
+                      Yay! You unlocked FREE shipping on this order ÃƒÂ°Ã…Â¸Ã…Â½Ã¢â‚¬Â°
                     </span>
                   )}
                   <span className="text-stone-400 font-mono">{Math.floor(freeShippingProgress)}%</span>
@@ -314,7 +315,14 @@ export default function CartPage(): React.JSX.Element {
                         disabled={isValidating}
                         className="bg-stone-900 hover:bg-brand text-white text-[10px] uppercase font-bold tracking-widest px-4 h-11 transition duration-200 rounded-none disabled:bg-stone-300"
                       >
-                        {isValidating ? "Checking..." : "Apply"}
+                        {isValidating ? (
+                          <span className="inline-flex items-center gap-2">
+                            <LoadingMark />
+                            Checking...
+                          </span>
+                        ) : (
+                          "Apply"
+                        )}
                       </button>
                     </div>
                     {couponError && (
