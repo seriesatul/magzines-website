@@ -2,7 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import type { OrderStatus } from "@prisma/client";
+import type { OrderStatus, Prisma } from "@prisma/client";
 import { db } from "@/server/db/client";
 import { formatPaise } from "@/server/db/money";
 import { SubmitButton } from "@/components/loading/SubmitButton";
@@ -11,6 +11,11 @@ import {
   dispatchOrderStatusNotification,
   type OrderStatusType
 } from "@/server/services/order-notifications";
+import {
+  addRetentionDays,
+  getDefaultCompletedOrderRetentionDays,
+  normalizeRetentionDays
+} from "@/server/services/order-retention";
 import {
   ArrowLeft,
   ClipboardList,
@@ -31,7 +36,7 @@ const FALLBACK_PRODUCT_IMAGE =
   "https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=1200&q=80";
 
 // Global, typed read-only array to ensure 100% parameter type-safety (resolves implicit any)
-const STATUS_STEPS = ["PENDING", "DESIGNING", "SHIPPED"] as const;
+const STATUS_STEPS = ["PENDING", "DESIGNING", "SHIPPED", "DELIVERED"] as const;
 const NOTIFIABLE_STATUS_STEPS = ["DESIGNING", "SHIPPED"] as const;
 const LAYOUT_TYPES = [
   "FULL_BLEED_1_PHOTO",
@@ -53,7 +58,7 @@ function isNotifiableOrderStatus(value: OrderStatus): value is OrderStatusType {
 
 function normalizeAdminOrderStatus(value: OrderStatus): (typeof STATUS_STEPS)[number] {
   if (value === "SHIPPED" || value === "DELIVERED") {
-    return "SHIPPED";
+    return value === "DELIVERED" ? "DELIVERED" : "SHIPPED";
   }
 
   if (value === "DESIGNING" || value === "PRINTING") {
@@ -74,6 +79,10 @@ function formatAdminOrderStatus(value: OrderStatus): string {
 
   if (value === "SHIPPED") {
     return "Order shipped";
+  }
+
+  if (value === "DELIVERED") {
+    return "Completed";
   }
 
   return value;
@@ -290,11 +299,13 @@ export default async function AdminOrderDetailPage({
   const currentPipelineStatus = normalizeAdminOrderStatus(order.status);
 
   // 2. Fetch associated items, photos, and private internal notes in parallel (Rule 4)
-  const [orderItems, uploadedPhotos, internalNotes] = await Promise.all([
+  const [orderItems, uploadedPhotos, internalNotes, defaultRetentionDays] = await Promise.all([
     db.orderItem.findMany({ where: { orderId: order.id } }),
     db.photoUpload.findMany({ where: { orderId: order.id }, orderBy: { createdAt: "asc" } }),
-    db.internalNote.findMany({ where: { orderId: order.id }, orderBy: { createdAt: "desc" } })
+    db.internalNote.findMany({ where: { orderId: order.id }, orderBy: { createdAt: "desc" } }),
+    getDefaultCompletedOrderRetentionDays()
   ]);
+  const currentRetentionDays = order.retentionDays || defaultRetentionDays;
   const orderItemsWithLayout = orderItems as Array<
     (typeof orderItems)[number] & { layoutMetadata: unknown }
   >;
@@ -310,14 +321,59 @@ export default async function AdminOrderDetailPage({
     try {
       logger.info({ orderNumber: activeOrderNumber, statusInput }, "Admin transitioning order status");
 
-      await db.order.update({
+      const existingOrder = await db.order.findUnique({
         where: { id: activeOrderId },
-        data: {
-          status: statusInput,
-          trackingUrl: trackingUrlInput?.trim() || null
+        select: {
+          status: true,
+          completedAt: true,
+          deliveredAt: true
         }
       });
 
+      if (!existingOrder) {
+        return;
+      }
+
+      const statusUpdateData: Prisma.OrderUpdateInput = {
+        status: statusInput,
+        trackingUrl: trackingUrlInput?.trim() || null
+      };
+
+      if (statusInput === "DELIVERED") {
+        const retentionDays = normalizeRetentionDays(
+          formData.get("retentionDays"),
+          await getDefaultCompletedOrderRetentionDays()
+        );
+        const completedAt = existingOrder.completedAt ?? new Date();
+
+        statusUpdateData.completedAt = completedAt;
+        statusUpdateData.deliveredAt = existingOrder.deliveredAt ?? completedAt;
+        statusUpdateData.retentionDays = retentionDays;
+        statusUpdateData.retentionDeleteAfter = addRetentionDays(completedAt, retentionDays);
+      } else {
+        statusUpdateData.completedAt = null;
+        statusUpdateData.retentionDeleteAfter = null;
+      }
+
+      await db.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { id: activeOrderId },
+          data: statusUpdateData
+        });
+
+        if (existingOrder.status !== statusInput) {
+          await tx.orderStatusHistory.create({
+            data: {
+              orderId: activeOrderId,
+              fromStatus: existingOrder.status,
+              toStatus: statusInput,
+              message: statusInput === "DELIVERED"
+                ? "Order marked completed and retention purge scheduled."
+                : null
+            }
+          });
+        }
+      });
       // Trigger automatic Meta WhatsApp template notification (Rule 5.3)
       if (isNotifiableOrderStatus(statusInput)) {
         await dispatchOrderStatusNotification(activeOrderId, statusInput);
@@ -559,6 +615,24 @@ export default async function AdminOrderDetailPage({
                   ))}
                 </select>
               </label>
+
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                Retention After Completion (Days)
+                <input
+                  type="number"
+                  name="retentionDays"
+                  min={1}
+                  max={365}
+                  defaultValue={currentRetentionDays}
+                  className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 text-xs font-mono outline-none focus-visible:border-brand rounded-none"
+                />
+              </label>
+
+              {order.retentionDeleteAfter ? (
+                <div className="border border-stone-200 bg-[#FAFAF8] p-3 text-[10px] font-light leading-5 text-stone-500">
+                  Scheduled purge: <span className="font-mono text-stone-900">{new Date(order.retentionDeleteAfter).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</span>
+                </div>
+              ) : null}
 
               <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
                 Carrier Tracking Link (Optional)

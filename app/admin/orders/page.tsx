@@ -109,8 +109,14 @@ export default async function AdminOrdersListPage({
             Total of {totalOrders} entries matched in database ledger
           </p>
         </div>
-        <div className="flex gap-4">
-        <a
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href={"/admin/orders/deletion-logs" as Route}
+            className="h-11 inline-flex items-center justify-center border border-stone-300 bg-white px-6 text-xs uppercase font-bold tracking-widest text-stone-900 transition duration-200 hover:border-brand hover:text-brand rounded-none"
+          >
+            Retention Logs
+          </Link>
+          <a
           href="/api/admin/export"
           className="h-11 inline-flex items-center justify-center bg-stone-900 hover:bg-brand text-white text-xs uppercase font-bold tracking-widest px-6 rounded-none transition duration-200 border border-stone-800"
           title="Download CSV database stream"
@@ -175,6 +181,7 @@ export default async function AdminOrdersListPage({
                   <th className="pb-3">Customer details</th>
                   <th className="pb-3">Payment</th>
                   <th className="pb-3">Status</th>
+                  <th className="pb-3">Retention</th>
                   <th className="pb-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -205,6 +212,15 @@ export default async function AdminOrdersListPage({
                       </span>
                     </td>
                     <td className="py-4 font-semibold text-stone-900">{formatOrderStatus(order.status)}</td>
+                    <td className="py-4 text-[10px] font-mono text-stone-400">
+                      {order.retentionDeleteAfter ? (
+                        <span>Purges {new Date(order.retentionDeleteAfter).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+                      ) : order.status === OrderStatus.DELIVERED ? (
+                        <span className="text-brand">Pending schedule</span>
+                      ) : (
+                        <span>-</span>
+                      )}
+                    </td>
                     <td className="py-4 text-right">
                       <div className="inline-flex items-center gap-2">
                         {order._count.photos > 0 ? (
@@ -274,8 +290,12 @@ function formatOrderStatus(status: OrderStatus): string {
     return "Order in progress";
   }
 
-  if (status === OrderStatus.SHIPPED || status === OrderStatus.DELIVERED) {
+  if (status === OrderStatus.SHIPPED) {
     return "Order shipped";
+  }
+
+  if (status === OrderStatus.DELIVERED) {
+    return "Completed";
   }
 
   return "Cancelled";

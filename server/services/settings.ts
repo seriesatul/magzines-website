@@ -11,6 +11,7 @@ export type DynamicSettingKey =
   | "partialCodAdvancePaise"
   | "partialCodFeePaise"
   | "rateLimitRequestsPerMin"
+  | "completedOrderRetentionDays"
   | "razorpayKeyId"
   | "razorpayKeySecret"
   | "resendApiKey"
@@ -50,6 +51,7 @@ const settingFallbacks: Record<DynamicSettingKey, () => string | number> = {
   partialCodAdvancePaise: () => env.PARTIAL_COD_ADVANCE_PAISE,
   partialCodFeePaise: () => env.PARTIAL_COD_FEE_PAISE,
   rateLimitRequestsPerMin: () => env.RATE_LIMIT_REQUESTS_PER_MINUTE,
+  completedOrderRetentionDays: () => env.COMPLETED_ORDER_RETENTION_DAYS,
   razorpayKeyId: () => env.RAZORPAY_KEY_ID,
   razorpayKeySecret: () => env.RAZORPAY_KEY_SECRET,
   resendApiKey: () => env.RESEND_API_KEY,
@@ -85,6 +87,7 @@ async function getGlobalSettingRow(): Promise<DynamicSettingRow | null> {
         partialCodAdvancePaise: true,
         partialCodFeePaise: true,
         rateLimitRequestsPerMin: true,
+        completedOrderRetentionDays: true,
         razorpayKeyId: true,
         razorpayKeySecret: true,
         resendApiKey: true,

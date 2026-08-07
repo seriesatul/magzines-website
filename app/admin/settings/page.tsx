@@ -39,7 +39,8 @@ const SETTINGS_SECTIONS: SettingSection[] = [
       { key: "defaultShippingFeePaise", name: "defaultShippingFeeRupees", label: "Default Shipping Fee", kind: "rupees" },
       { key: "partialCodAdvancePaise", name: "partialCodAdvanceRupees", label: "Partial COD Advance", kind: "rupees" },
       { key: "partialCodFeePaise", name: "partialCodFeeRupees", label: "Partial COD Fee", kind: "rupees" },
-      { key: "rateLimitRequestsPerMin", name: "rateLimitRequestsPerMin", label: "Requests Per Minute", kind: "number" }
+      { key: "rateLimitRequestsPerMin", name: "rateLimitRequestsPerMin", label: "Requests Per Minute", kind: "number" },
+      { key: "completedOrderRetentionDays", name: "completedOrderRetentionDays", label: "Completed Order Retention", kind: "number" }
     ]
   },
   {
@@ -163,6 +164,7 @@ export default async function AdminSettingsPage({
           partialCodAdvancePaise: parseRupeesToPaise(formData, "partialCodAdvanceRupees"),
           partialCodFeePaise: parseRupeesToPaise(formData, "partialCodFeeRupees"),
           rateLimitRequestsPerMin: parsePositiveInteger(formData, "rateLimitRequestsPerMin"),
+          completedOrderRetentionDays: parseRetentionDays(formData, "completedOrderRetentionDays"),
           ...stringSettings
         },
         create: {
@@ -172,6 +174,7 @@ export default async function AdminSettingsPage({
           partialCodAdvancePaise: parseRupeesToPaise(formData, "partialCodAdvanceRupees"),
           partialCodFeePaise: parseRupeesToPaise(formData, "partialCodFeeRupees"),
           rateLimitRequestsPerMin: parsePositiveInteger(formData, "rateLimitRequestsPerMin"),
+          completedOrderRetentionDays: parseRetentionDays(formData, "completedOrderRetentionDays"),
           ...stringSettings
         }
       });
@@ -327,6 +330,7 @@ function hasEnvFallback(key: DynamicSettingKey): boolean {
     partialCodAdvancePaise: env.PARTIAL_COD_ADVANCE_PAISE,
     partialCodFeePaise: env.PARTIAL_COD_FEE_PAISE,
     rateLimitRequestsPerMin: env.RATE_LIMIT_REQUESTS_PER_MINUTE,
+    completedOrderRetentionDays: env.COMPLETED_ORDER_RETENTION_DAYS,
     razorpayKeyId: env.RAZORPAY_KEY_ID,
     razorpayKeySecret: env.RAZORPAY_KEY_SECRET,
     resendApiKey: env.RESEND_API_KEY,
@@ -385,6 +389,16 @@ function parsePositiveInteger(formData: FormData, name: string): number {
   return value;
 }
 
+function parseRetentionDays(formData: FormData, name: string): number {
+  const value = parsePositiveInteger(formData, name);
+
+  if (value > 365) {
+    throw new Error(`${name} must be between 1 and 365 days.`);
+  }
+
+  return value;
+}
+
 function resolveSecretValue(formData: FormData, name: string, currentValue: string | null): string | null {
   const submittedValue = String(formData.get(name) ?? "").trim();
 
@@ -424,5 +438,6 @@ function getSettingsSaveFailureMessage(error: unknown): string {
 function isSettingsValidationMessage(message: string): boolean {
   return message.endsWith("must be a positive rupee amount.") ||
     message.endsWith("must be a positive integer.") ||
-    message.endsWith("must be greater than zero.");
+    message.endsWith("must be greater than zero.") ||
+    message.endsWith("must be between 1 and 365 days.");
 }

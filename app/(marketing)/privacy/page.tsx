@@ -36,7 +36,7 @@ export default function PrivacyPolicyPage(): React.JSX.Element {
             <Lock className="h-5 w-5 text-brand" />
             <h3 className="text-xs font-bold uppercase tracking-wider text-stone-900">Photo Security</h3>
             <p className="text-[11px] text-stone-500 font-light leading-relaxed">
-              Uploaded photos are kept private on encrypted servers and automatically purged 30 days after dispatch.
+              Uploaded photos are kept private on encrypted servers and automatically purged after the completed-order retention window, defaulting to 7 days.
             </p>
           </div>
           <div className="border border-stone-200 bg-white p-5 rounded-none space-y-2">
@@ -73,7 +73,7 @@ export default function PrivacyPolicyPage(): React.JSX.Element {
           <div className="space-y-4">
             <h2 className="font-serif text-2xl font-bold text-stone-900">2. File & Photograph Purge Policy</h2>
             <p>
-              Your photographs are your private memories, and we treat them as such. All image files uploaded to our secure Cloudflare R2 buckets are held with strict read restrictions. Once your custom magazine has been successfully designed, printed, and dispatched, your uploaded photo files are **permanently and automatically deleted from our servers 30 days post-dispatch**. We do not retain copies of your pictures.
+              Your photographs are your private memories, and we treat them as such. All image files uploaded to our secure Cloudflare R2 buckets are held with strict read restrictions. Once your custom magazine has been successfully completed, your uploaded photo files are **permanently and automatically deleted from our servers after the configured retention window, defaulting to 7 days**. We do not retain copies of your pictures.
             </p>
           </div>
 

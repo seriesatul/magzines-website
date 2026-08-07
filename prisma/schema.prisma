@@ -240,6 +240,7 @@ model Setting {
   partialCodAdvancePaise      Int      @default(12000)
   partialCodFeePaise          Int      @default(12000)
   rateLimitRequestsPerMin     Int      @default(120)
+  completedOrderRetentionDays Int      @default(7)
   razorpayKeyId               String?
   razorpayKeySecret           String?
   resendApiKey                String?
@@ -322,6 +323,9 @@ model Order {
   estimatedDeliveryAt  DateTime
   trackingUrl          String?
   deliveredAt          DateTime?
+  completedAt          DateTime?
+  retentionDays        Int                  @default(7)
+  retentionDeleteAfter DateTime?
   cancelledAt          DateTime?
   deletedAt            DateTime?
   user                 User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -338,9 +342,32 @@ model Order {
   @@index([customerPhone])
   @@index([status, createdAt])
   @@index([paymentStatus])
+  @@index([retentionDeleteAfter])
   @@index([deletedAt])
 }
 
+model OrderDeletionLog {
+  id                   String   @id @default(cuid())
+  orderId              String?
+  orderNumber          String   @unique
+  customerName         String
+  customerPhone        String
+  customerEmail        String?
+  status               String
+  completedAt          DateTime?
+  retentionDeleteAfter DateTime?
+  photoCount           Int      @default(0)
+  photoBytes           Int      @default(0)
+  deletedPhotoCount    Int      @default(0)
+  failedObjectKeys     String[] @default([])
+  orderSnapshot        Json
+  deletedAt            DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([deletedAt])
+  @@index([customerPhone])
+}
 model OrderItem {
   id                 String   @id @default(cuid())
   orderId            String

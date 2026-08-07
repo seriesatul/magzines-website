@@ -169,7 +169,10 @@ export const serverEnvSchema = publicEnvSchema.extend({
   PARTIAL_COD_FEE_PAISE: integerStringWithDefault("12000").pipe(z.number().int().min(12000).max(12000)),
   FREE_SHIPPING_THRESHOLD_PAISE: integerStringWithDefault("99900").pipe(z.number().int().min(0)),
   DEFAULT_SHIPPING_FEE_PAISE: integerStringWithDefault("12000").pipe(z.number().int().min(0)),
-  RATE_LIMIT_REQUESTS_PER_MINUTE: integerStringWithDefault("120").pipe(z.number().int().min(1).max(10000))
+  RATE_LIMIT_REQUESTS_PER_MINUTE: integerStringWithDefault("120").pipe(z.number().int().min(1).max(10000)),
+  COMPLETED_ORDER_RETENTION_DAYS: integerStringWithDefault("7").pipe(z.number().int().min(1).max(365)),
+  ORDER_RETENTION_CRON_SECRET: optionalCredential(),
+  CRON_SECRET: optionalCredential()
 });
 
 export type PublicEnv = z.infer<typeof publicEnvSchema>;
