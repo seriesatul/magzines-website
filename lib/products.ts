@@ -62,6 +62,7 @@ export type StorefrontProduct = {
   maxPhotos: number;
   imageUrl: string;
   imageAlt: string;
+  soldQuantity: number;
 };
 
 export type StorefrontCategory = {
@@ -138,6 +139,7 @@ type StorefrontProductRecord = {
     url: string;
     alt: string;
   }>;
+  soldQuantity?: number;
 };
 
 function mapStorefrontProduct(product: StorefrontProductRecord): StorefrontProduct {
@@ -159,7 +161,8 @@ function mapStorefrontProduct(product: StorefrontProductRecord): StorefrontProdu
     minPhotos: product.minPhotos,
     maxPhotos: product.maxPhotos,
     imageUrl: getSafeMediaUrl(image?.url, FALLBACK_PRODUCT_IMAGE),
-    imageAlt: image?.alt ?? `${product.name} cover image`
+    imageAlt: image?.alt ?? `${product.name} cover image`,
+    soldQuantity: product.soldQuantity ?? 0
   };
 }
 
@@ -305,7 +308,15 @@ export const getStorefrontProducts = unstable_cache(
         }
       });
 
-      return products.map(mapStorefrontProduct);
+      const salesByProductId = await getSoldQuantityByProductId(products.map((product) => product.id));
+      const mappedProducts = products.map((product) =>
+        mapStorefrontProduct({
+          ...product,
+          soldQuantity: salesByProductId.get(product.id) ?? 0
+        })
+      );
+
+      return prioritizeBestSellers(mappedProducts);
     } catch (error) {
       // Graceful degradation: Log via Pino and return empty array fallback instead of crashing
       logger.error(
@@ -322,6 +333,44 @@ export const getStorefrontProducts = unstable_cache(
   }
 );
 
+function prioritizeBestSellers(products: Array<StorefrontProduct>): Array<StorefrontProduct> {
+  const rankedProducts = products.map((product, index) => ({ product, index }));
+  const bestSellers = rankedProducts
+    .filter(({ product }) => product.soldQuantity > 0)
+    .sort((a, b) => {
+      const salesDelta = b.product.soldQuantity - a.product.soldQuantity;
+      return salesDelta === 0 ? a.index - b.index : salesDelta;
+    })
+    .slice(0, 4)
+    .map(({ product }) => product);
+  const bestSellerIds = new Set(bestSellers.map((product) => product.id));
+  const remainingProducts = products.filter((product) => !bestSellerIds.has(product.id));
+
+  return [...bestSellers, ...remainingProducts];
+}
+
+async function getSoldQuantityByProductId(productIds: Array<string>): Promise<Map<string, number>> {
+  if (productIds.length === 0) {
+    return new Map();
+  }
+
+  const sales = await db.orderItem.groupBy({
+    by: ["productId"],
+    where: {
+      productId: { in: productIds },
+      order: {
+        deletedAt: null
+      }
+    },
+    _sum: {
+      quantity: true
+    }
+  });
+
+  return new Map(
+    sales.map((sale) => [sale.productId, sale._sum.quantity ?? 0])
+  );
+}
 export const getStorefrontProductBySlug = unstable_cache(
   async (slug: string): Promise<StorefrontProductDetails | null> => {
     try {
@@ -369,6 +418,7 @@ export const getStorefrontProductBySlug = unstable_cache(
         maxPhotos: product.maxPhotos,
         imageUrl: getSafeMediaUrl(image?.url, FALLBACK_PRODUCT_IMAGE),
         imageAlt: image?.alt ?? `${product.name} cover image`,
+        soldQuantity: 0,
         images: product.images.map((imageItem) => ({
           url: getSafeMediaUrl(imageItem.url, FALLBACK_PRODUCT_IMAGE),
           alt: imageItem.alt,

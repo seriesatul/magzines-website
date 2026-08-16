@@ -89,10 +89,24 @@ type AppliedCoupon = {
   discountValuePaise: number | null;
 };
 
+type CheckoutFormDraft = {
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  pincode: string;
+  notes: string;
+  paymentType: CheckoutPaymentType;
+};
+
 const PHONE_REGEX = /^[6-9]\d{9}$/;
 const PINCODE_REGEX = /^[1-9][0-9]{5}$/;
 const DIRECT_CHECKOUT_STORAGE_KEY = "hearts-and-beans-direct-checkout";
 const CART_COUPON_STORAGE_KEY = "hearts-and-beans-coupon-code";
+const CHECKOUT_FORM_STORAGE_KEY = "hearts-and-beans-checkout-form";
 
 export function CheckoutClient({
   session,
@@ -129,6 +143,7 @@ export function CheckoutClient({
   const [couponError, setCouponError] = useState<string | null>(null);
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
   const [hasCheckedInitialCoupon, setHasCheckedInitialCoupon] = useState(false);
+  const [hasLoadedCheckoutDraft, setHasLoadedCheckoutDraft] = useState(false);
 
   useEffect(() => {
     if (session?.user?.name) {
@@ -139,6 +154,66 @@ export function CheckoutClient({
       setCustomerEmail(session.user.email);
     }
   }, [session]);
+
+  useEffect(() => {
+    try {
+      const rawDraft = window.localStorage.getItem(CHECKOUT_FORM_STORAGE_KEY);
+
+      if (!rawDraft) {
+        return;
+      }
+
+      const draft = JSON.parse(rawDraft) as Partial<CheckoutFormDraft>;
+
+      if (typeof draft.customerName === "string") setCustomerName(draft.customerName);
+      if (typeof draft.customerPhone === "string") setCustomerPhone(draft.customerPhone);
+      if (typeof draft.customerEmail === "string") setCustomerEmail(draft.customerEmail);
+      if (typeof draft.line1 === "string") setLine1(draft.line1);
+      if (typeof draft.line2 === "string") setLine2(draft.line2);
+      if (typeof draft.city === "string") setCity(draft.city);
+      if (typeof draft.state === "string") setState(draft.state);
+      if (typeof draft.pincode === "string") setPincode(draft.pincode);
+      if (typeof draft.notes === "string") setNotes(draft.notes);
+      if (isCheckoutPaymentType(draft.paymentType)) setPaymentType(draft.paymentType);
+    } catch {
+      window.localStorage.removeItem(CHECKOUT_FORM_STORAGE_KEY);
+    } finally {
+      setHasLoadedCheckoutDraft(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedCheckoutDraft) {
+      return;
+    }
+
+    const draft: CheckoutFormDraft = {
+      customerName,
+      customerPhone,
+      customerEmail,
+      line1,
+      line2,
+      city,
+      state,
+      pincode,
+      notes,
+      paymentType
+    };
+
+    window.localStorage.setItem(CHECKOUT_FORM_STORAGE_KEY, JSON.stringify(draft));
+  }, [
+    city,
+    customerEmail,
+    customerName,
+    customerPhone,
+    hasLoadedCheckoutDraft,
+    line1,
+    line2,
+    notes,
+    paymentType,
+    pincode,
+    state
+  ]);
 
   useEffect(() => {
     if (!isDirectCheckout) {
@@ -272,6 +347,7 @@ export function CheckoutClient({
 
   function clearCheckoutState(): void {
     window.localStorage.removeItem(CART_COUPON_STORAGE_KEY);
+    window.localStorage.removeItem(CHECKOUT_FORM_STORAGE_KEY);
 
     if (isDirectCheckout) {
       window.localStorage.removeItem(DIRECT_CHECKOUT_STORAGE_KEY);
@@ -1028,6 +1104,10 @@ function SummaryRow({
       </span>
     </div>
   );
+}
+
+function isCheckoutPaymentType(value: unknown): value is CheckoutPaymentType {
+  return value === "PREPAID" || value === "COD" || value === "PARTIAL_COD";
 }
 
 function buildPaymentOptions(settings: CheckoutSettings): PaymentOption[] {

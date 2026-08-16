@@ -1,7 +1,15 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, CheckCircle, GripVertical, ImagePlus, Trash2, UploadCloud } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  GripVertical,
+  ImagePlus,
+  Link as LinkIcon,
+  Trash2,
+  UploadCloud
+} from "lucide-react";
 
 type UploadStatus = "ready" | "pending" | "uploading" | "error";
 
@@ -52,6 +60,36 @@ function getErrorMessage(error: unknown): string {
   return "Upload failed.";
 }
 
+function getLinkedImageAlt(url: string): string {
+  try {
+    const parsedUrl = new URL(url);
+    const fileName = decodeURIComponent(parsedUrl.pathname.split("/").pop() || "product image");
+    return fileName.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || parsedUrl.hostname;
+  } catch {
+    return "Product image";
+  }
+}
+
+function parseImageLinks(value: string): Array<string> {
+  const links = value
+    .split(/[\n,]+/)
+    .map((link) => link.trim())
+    .filter(Boolean);
+  const uniqueLinks = new Set<string>();
+
+  for (const link of links) {
+    const parsedUrl = new URL(link);
+
+    if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+      throw new Error("Only http and https image links are supported.");
+    }
+
+    uniqueLinks.add(parsedUrl.toString());
+  }
+
+  return Array.from(uniqueLinks);
+}
+
 function uploadWithProgress(
   uploadUrl: string,
   file: File,
@@ -85,6 +123,8 @@ export function ProductImageUploader({
   initialImages = []
 }: ProductImageUploaderProps): React.JSX.Element {
   const previewUrlsRef = useRef<Set<string>>(new Set());
+  const [linkInput, setLinkInput] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [items, setItems] = useState<Array<UploadItem>>(() =>
     initialImages.map((image, index) => ({
       ...image,
@@ -199,6 +239,46 @@ export function ProductImageUploader({
     [items.length, uploadFile]
   );
 
+  const handleAddLinks = useCallback(
+    (event: React.FormEvent<HTMLFormElement>): void => {
+      event.preventDefault();
+      setLinkError(null);
+
+      try {
+        const links = parseImageLinks(linkInput);
+
+        if (links.length === 0) {
+          setLinkError("Paste at least one image link.");
+          return;
+        }
+
+        const existingUrls = new Set(items.map((item) => item.url));
+        const startIndex = items.length;
+        const nextItems = links
+          .filter((link) => !existingUrls.has(link))
+          .map((link, index): UploadItem => ({
+            localId: createLocalId(),
+            url: link,
+            alt: getLinkedImageAlt(link),
+            sortOrder: startIndex + index + 1,
+            progress: 100,
+            status: "ready"
+          }));
+
+        if (nextItems.length === 0) {
+          setLinkError("Those image links are already attached.");
+          return;
+        }
+
+        setItems((current) => [...current, ...nextItems]);
+        setLinkInput("");
+      } catch {
+        setLinkError("Paste valid http or https image links.");
+      }
+    },
+    [items, linkInput]
+  );
+
   const removeItem = useCallback((localId: string): void => {
     setItems((current) => {
       const target = current.find((item) => item.localId === localId);
@@ -241,6 +321,35 @@ export function ProductImageUploader({
           }}
         />
       </label>
+
+      <form onSubmit={handleAddLinks} className="border border-stone-200 bg-white p-4 rounded-none">
+        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-stone-500">
+          <LinkIcon className="h-3.5 w-3.5 text-brand" />
+          Add image links
+        </div>
+        <textarea
+          value={linkInput}
+          onChange={(event) => {
+            setLinkInput(event.target.value);
+            setLinkError(null);
+          }}
+          rows={3}
+          placeholder="Paste Blogger CDN or image URLs, one per line"
+          className="mt-3 w-full border border-stone-200 bg-[#FAFAF8] px-3 py-2 text-xs leading-5 outline-none transition focus:border-brand rounded-none"
+        />
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[11px] font-light leading-5 text-stone-500">
+            Blogger links such as blogger.googleusercontent.com are supported, along with uploaded files.
+          </p>
+          <button
+            type="submit"
+            className="h-10 bg-stone-900 px-5 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand rounded-none"
+          >
+            Add Links
+          </button>
+        </div>
+        {linkError ? <p className="mt-2 text-[11px] font-medium text-red-600">{linkError}</p> : null}
+      </form>
 
       {items.length === 0 ? (
         <div className="border border-stone-200 bg-white p-6 text-xs font-light text-stone-500 rounded-none">

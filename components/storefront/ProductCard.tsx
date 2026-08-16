@@ -14,10 +14,10 @@ export function ProductCard({ product }: ProductCardProps): React.ReactElement {
     product.salePricePaise !== null && product.salePricePaise < product.basePricePaise;
 
   return (
-    <article className="group bg-transparent">
+    <article className="group flex h-full min-w-0 flex-col bg-transparent">
       <Link
         href={`/products/${product.slug}`}
-        className={isOutOfStock ? "pointer-events-none" : "block"}
+        className={isOutOfStock ? "pointer-events-none block" : "block"}
         aria-disabled={isOutOfStock}
       >
         <div className="relative aspect-[3/4] overflow-hidden border border-stone-200 bg-[#FAFAF8]">
@@ -47,19 +47,23 @@ export function ProductCard({ product }: ProductCardProps): React.ReactElement {
         </div>
       </Link>
 
-      <div className="space-y-2 pt-4">
-        {product.category ? (
-          <p className="text-[0.625rem] font-medium uppercase leading-3 tracking-[0.12em] text-stone-400">
-            {product.category.name}
-          </p>
-        ) : null}
-        <Link href={`/products/${product.slug}`} className="block">
-          <h2 className="font-serif text-xl font-normal leading-tight text-stone-900 transition group-hover:text-brand">
+      <div className="flex min-h-[104px] min-w-0 flex-1 flex-col pt-4">
+        <div className="min-h-3">
+          {product.category ? (
+            <p className="truncate text-[0.625rem] font-medium uppercase leading-3 tracking-[0.12em] text-stone-400">
+              {product.category.name}
+            </p>
+          ) : null}
+        </div>
+
+        <Link href={`/products/${product.slug}`} className="mt-2 block min-w-0">
+          <h2 className="truncate font-serif text-xl font-normal leading-tight text-stone-900 transition group-hover:text-brand">
             {product.name}
           </h2>
           <span className="mt-2 block h-0.5 w-0 bg-brand transition-all duration-300 group-hover:w-12" />
         </Link>
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+
+        <div className="mt-auto flex min-h-6 flex-wrap items-baseline gap-x-2 gap-y-1 pt-3">
           <p className="text-sm font-medium text-brand">
             {formatPaise(product.pricePaise)}
           </p>
@@ -69,10 +73,6 @@ export function ProductCard({ product }: ProductCardProps): React.ReactElement {
             </p>
           ) : null}
         </div>
-
-        <p className="text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-stone-400">
-          {`Custom - Printed - Ships in ${product.productionDays} days - ${product.minPhotos}-${product.maxPhotos} photos`}
-        </p>
       </div>
     </article>
   );

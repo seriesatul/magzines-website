@@ -87,6 +87,34 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "plus.unsplash.com"
       },
+      {
+        protocol: "https",
+        hostname: "blogger.googleusercontent.com"
+      },
+      {
+        protocol: "https",
+        hostname: "*.bp.blogspot.com"
+      },
+      {
+        protocol: "https",
+        hostname: "*.blogspot.com"
+      },
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com"
+      },
+      {
+        protocol: "https",
+        hostname: "lh4.googleusercontent.com"
+      },
+      {
+        protocol: "https",
+        hostname: "lh5.googleusercontent.com"
+      },
+      {
+        protocol: "https",
+        hostname: "lh6.googleusercontent.com"
+      },
       ...(r2PublicImagePattern ? [r2PublicImagePattern] : [])
     ]
   },
