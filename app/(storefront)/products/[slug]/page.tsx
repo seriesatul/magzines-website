@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getStorefrontProductBySlug } from "@/lib/products";
 import { ProductDetailClient } from "@/components/products/ProductDetailClient";
+import { getCoverUploadSettings } from "@/lib/cover-upload-settings";
 
 export async function generateMetadata({
   params
@@ -41,13 +42,16 @@ export default async function ProductDetailPage({
   params: Promise<{ slug: string }>;
 }): Promise<React.JSX.Element> {
   const { slug } = await params;
-  const product = await getStorefrontProductBySlug(slug);
+  const [product, coverUploadSettings] = await Promise.all([
+    getStorefrontProductBySlug(slug),
+    getCoverUploadSettings()
+  ]);
 
   if (!product) {
     notFound();
   }
 
   return (
-    <ProductDetailClient product={product} />
+    <ProductDetailClient product={product} coverUploadSettings={coverUploadSettings} />
   );
 }

@@ -10,8 +10,8 @@ import type { PhotobookCartItem } from "@/types/photobook";
 import { LoadingMark } from "@/components/loading/LoadingMark";
 
 // Standard Indian shipping rules in Paise (Rule 2)
-const FREE_SHIPPING_THRESHOLD_PAISE = 99900; // ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹999
-const DEFAULT_SHIPPING_FEE_PAISE = 12000;     // ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¹120
+const FREE_SHIPPING_THRESHOLD_PAISE = 99900; // Rs.999
+const DEFAULT_SHIPPING_FEE_PAISE = 12000; // Rs.120
 
 export default function CartPage(): React.JSX.Element {
   const { items, updateQuantity, removeItem, subtotalPaise, clearCart } = useCart();
@@ -167,7 +167,7 @@ export default function CartPage(): React.JSX.Element {
                     </span>
                   ) : (
                     <span className="text-emerald-700 font-semibold flex items-center gap-1.5">
-                      Yay! You unlocked FREE shipping on this order ÃƒÂ°Ã…Â¸Ã…Â½Ã¢â‚¬Â°
+                      Free shipping unlocked for this order
                     </span>
                   )}
                   <span className="text-stone-400 font-mono">{Math.floor(freeShippingProgress)}%</span>
@@ -205,12 +205,17 @@ export default function CartPage(): React.JSX.Element {
                         {/* Dynamic Custom Metadata labels */}
                         {item.customMessage && (
                           <p className="text-[11px] text-stone-500 font-light mt-3">
-                            <strong>Customization:</strong> "{item.customMessage}"
+                            <strong>Customization:</strong> {item.customMessage}
                           </p>
                         )}
                         <p className="text-[11px] text-stone-500 font-light mt-1">
                           <strong>Photos:</strong> {item.uploadLaterOnWhatsApp ? "WhatsApp upload later" : `${item.photosCount} originals attached`}
                         </p>
+                        {item.coverPhotos && item.coverPhotos.length > 0 ? (
+                          <p className="text-[11px] text-stone-500 font-light mt-1">
+                            <strong>Cover photos:</strong> {item.coverPhotos.length} cover-only attached
+                          </p>
+                        ) : null}
                         {item.layoutMetadata && item.layoutMetadata.length > 0 && (
                           <p className="text-[11px] text-stone-500 font-light mt-1">
                             <strong>Blueprint:</strong> {item.layoutMetadata.length} page spreads arranged

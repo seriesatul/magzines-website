@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,11 @@ import { RevealOnScroll } from "@/components/storefront/RevealOnScroll";
 import { useCart } from "@/components/storefront/CartProvider";
 import { type PhotobookCartItem } from "@/types/photobook";
 import { LoadingMark } from "@/components/loading/LoadingMark";
+import {
+  CoverPhotoUploader,
+  type CoverUploadLifecycle,
+  type UploadedCoverPhoto
+} from "@/components/checkout/CoverPhotoUploader";
 
 const FALLBACK_PRODUCT_IMAGE =
   "https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=1200&q=80";
@@ -27,8 +32,17 @@ type PhotoUploadState = {
   localPreviewUrl: string;
 };
 
+type ProductCoverUploadSettings = {
+  coverPhotoUploadEnabled: boolean;
+  coverPhotoUploadRequired: boolean;
+  coverPhotoMinFiles: number;
+  coverPhotoMaxFiles: number;
+  coverPhotoHelpText: string;
+};
+
 interface ProductDetailClientProps {
   product: StorefrontProductDetails;
+  coverUploadSettings: ProductCoverUploadSettings;
 }
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
@@ -55,22 +69,29 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function ProductDetailClient({ product }: ProductDetailClientProps): React.JSX.Element {
+export function ProductDetailClient({
+  product,
+  coverUploadSettings
+}: ProductDetailClientProps): React.JSX.Element {
   const router = useRouter();
   const { addItem } = useCart();
   const previewUrlsRef = useRef<Set<string>>(new Set());
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [customizationDescription, setCustomizationDescription] = useState("");
   const [photoUploads, setPhotoUploads] = useState<PhotoUploadState[]>([]);
+  const [coverPhotos, setCoverPhotos] = useState<UploadedCoverPhoto[]>([]);
+  const [coverUploadState, setCoverUploadState] = useState<CoverUploadLifecycle>("idle");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [addSuccess, setAddSuccess] = useState(false);
 
   useEffect(() => {
+    const previewUrls = previewUrlsRef.current;
+
     return () => {
-      previewUrlsRef.current.forEach((previewUrl) => URL.revokeObjectURL(previewUrl));
-      previewUrlsRef.current.clear();
+      previewUrls.forEach((previewUrl) => URL.revokeObjectURL(previewUrl));
+      previewUrls.clear();
     };
   }, []);
 
@@ -82,6 +103,14 @@ export function ProductDetailClient({ product }: ProductDetailClientProps): Reac
       ),
     [photoUploads]
   );
+
+  const handleCoverUploadsChange = useCallback((
+    photos: UploadedCoverPhoto[],
+    lifecycle: CoverUploadLifecycle
+  ): void => {
+    setCoverPhotos(photos);
+    setCoverUploadState(lifecycle);
+  }, []);
 
   const deliveryEstimate = useMemo(() => {
     const date = new Date();
@@ -231,6 +260,26 @@ export function ProductDetailClient({ product }: ProductDetailClientProps): Reac
       return null;
     }
 
+    if (coverUploadSettings.coverPhotoUploadEnabled) {
+      if (coverUploadState === "busy") {
+        setValidationError("Please wait for your cover photos to finish uploading before continuing.");
+        return null;
+      }
+
+      if (coverUploadState === "error") {
+        setValidationError("Some cover photos failed to upload. Retry or remove them before checkout.");
+        return null;
+      }
+
+      if (
+        coverUploadSettings.coverPhotoUploadRequired &&
+        coverPhotos.length < coverUploadSettings.coverPhotoMinFiles
+      ) {
+        setValidationError(`Upload at least ${coverUploadSettings.coverPhotoMinFiles} cover photo${coverUploadSettings.coverPhotoMinFiles === 1 ? "" : "s"} for the magazine cover.`);
+        return null;
+      }
+    }
+
     if (successfulUploads.length < product.minPhotos) {
       setValidationError(`Upload at least ${product.minPhotos} photos for this format.`);
       return null;
@@ -245,6 +294,15 @@ export function ProductDetailClient({ product }: ProductDetailClientProps): Reac
       mimeType: item.file.type
     }));
 
+    const uploadedCoverPhotos = coverPhotos.map((photo, index) => ({
+      key: photo.key,
+      url: photo.url,
+      name: photo.name,
+      size: photo.size,
+      mimeType: photo.mimeType || "image/jpeg",
+      sortOrder: photo.sortOrder ?? index
+    }));
+
     const cartItem: PhotobookCartItem = {
       id: `${product.id}-${Date.now()}`,
       productId: product.id,
@@ -255,6 +313,7 @@ export function ProductDetailClient({ product }: ProductDetailClientProps): Reac
       ...(description ? { customMessage: description } : {}),
       uploadLaterOnWhatsApp: false,
       photos: uploadedPhotos,
+      coverPhotos: coverUploadSettings.coverPhotoUploadEnabled ? uploadedCoverPhotos : [],
       photosCount: uploadedPhotos.length,
       layoutMetadata: [],
       imageUrl: product.imageUrl,
@@ -384,7 +443,7 @@ export function ProductDetailClient({ product }: ProductDetailClientProps): Reac
                   Upload <span className="font-normal italic text-stone-700">Original Photos</span>
                 </span>
                 <span className="max-w-[38ch] text-xs font-light leading-5 text-stone-500">
-                  Drop files here or select from your device. We upload the original image files without resizing or compression.
+                  Original photos will reside inside the pages of your magazine. Drop files here or select from your device; originals are uploaded without resizing or compression.
                 </span>
                 <input
                   type="file"
@@ -401,6 +460,18 @@ export function ProductDetailClient({ product }: ProductDetailClientProps): Reac
               <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
                 JPG, PNG, or WEBP / Up to 10MB each
               </p>
+
+              {coverUploadSettings.coverPhotoUploadEnabled ? (
+                <CoverPhotoUploader
+                  minFiles={coverUploadSettings.coverPhotoMinFiles}
+                  maxFiles={coverUploadSettings.coverPhotoMaxFiles}
+                  required={coverUploadSettings.coverPhotoUploadRequired}
+                  helpText={`${coverUploadSettings.coverPhotoHelpText} These uploaded cover photos will be used only for the cover pages of the magazine.`}
+                  disabled={isAdding || isPlacingOrder}
+                  onChange={handleCoverUploadsChange}
+                />
+              ) : null}
+
             </section>
 
             <section className="space-y-4">

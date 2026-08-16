@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import Script from "next/script";
@@ -25,11 +25,6 @@ import { INDIAN_STATES } from "@/server/validators/checkout";
 import type { PhotobookCartItem } from "@/types/photobook";
 import type { CheckoutSettings } from "@/lib/checkout-settings";
 import { LoadingMark } from "@/components/loading/LoadingMark";
-import {
-  CoverPhotoUploader,
-  type CoverUploadLifecycle,
-  type UploadedCoverPhoto
-} from "@/components/checkout/CoverPhotoUploader";
 
 type RazorpayCheckoutResponse = {
   razorpay_order_id: string;
@@ -118,8 +113,6 @@ export function CheckoutClient({
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [directCheckoutItem, setDirectCheckoutItem] = useState<PhotobookCartItem | null>(null);
   const [hasLoadedDirectCheckout, setHasLoadedDirectCheckout] = useState(false);
-  const [coverPhotos, setCoverPhotos] = useState<UploadedCoverPhoto[]>([]);
-  const [coverUploadState, setCoverUploadState] = useState<CoverUploadLifecycle>("idle");
 
   useEffect(() => {
     if (session?.user?.name) {
@@ -160,6 +153,17 @@ export function CheckoutClient({
 
     return items;
   }, [directCheckoutItem, isDirectCheckout, items]);
+
+  const checkoutCoverPhotos = useMemo(() => {
+    return Array.from(
+      new Map(
+        checkoutItems
+          .flatMap((item) => item.coverPhotos ?? [])
+          .filter((photo) => photo.key && photo.url)
+          .map((photo, index) => [photo.key, { ...photo, sortOrder: photo.sortOrder ?? index }] as const)
+      ).values()
+    );
+  }, [checkoutItems]);
 
   const checkoutSubtotalPaise = useMemo(() => {
     return checkoutItems.reduce(
@@ -260,13 +264,6 @@ export function CheckoutClient({
     router.push(getOrderTrackingUrl(order) as Route);
   }
 
-  const handleCoverUploadsChange = useCallback((
-    photos: UploadedCoverPhoto[],
-    lifecycle: CoverUploadLifecycle
-  ): void => {
-    setCoverPhotos(photos);
-    setCoverUploadState(lifecycle);
-  }, []);
 
   async function handleGoogleSignup(order: PlacedOrder): Promise<void> {
     setOtpError(null);
@@ -459,21 +456,16 @@ export function CheckoutClient({
     }
 
     if (checkoutSettings.coverPhotoUploadEnabled) {
-      if (coverUploadState === "busy") {
-        setValidationError("Please wait for your cover photos to finish uploading.");
-        return;
-      }
-
-      if (coverUploadState === "error") {
-        setValidationError("Some cover photos failed to upload. Retry or remove them before placing the order.");
+      if (checkoutCoverPhotos.length > checkoutSettings.coverPhotoMaxFiles) {
+        setValidationError(`Cover photos are limited to ${checkoutSettings.coverPhotoMaxFiles}.`);
         return;
       }
 
       if (
         checkoutSettings.coverPhotoUploadRequired &&
-        coverPhotos.length < checkoutSettings.coverPhotoMinFiles
+        checkoutCoverPhotos.length < checkoutSettings.coverPhotoMinFiles
       ) {
-        setValidationError(`Upload at least ${checkoutSettings.coverPhotoMinFiles} cover photo${checkoutSettings.coverPhotoMinFiles === 1 ? "" : "s"}.`);
+        setValidationError(`Upload at least ${checkoutSettings.coverPhotoMinFiles} cover photo${checkoutSettings.coverPhotoMinFiles === 1 ? "" : "s"} on the product page before checkout.`);
         return;
       }
     }
@@ -492,7 +484,7 @@ export function CheckoutClient({
         pincode: pincode.trim(),
         notes: notes.trim() || undefined,
         paymentType,
-        coverPhotos: checkoutSettings.coverPhotoUploadEnabled ? coverPhotos : [],
+        coverPhotos: checkoutSettings.coverPhotoUploadEnabled ? checkoutCoverPhotos : [],
         items: checkoutItems.map((item) => ({
           id: item.productId || item.id,
           slug: item.slug,
@@ -714,16 +706,6 @@ export function CheckoutClient({
               </div>
             </div>
 
-            {checkoutSettings.coverPhotoUploadEnabled ? (
-              <CoverPhotoUploader
-                minFiles={checkoutSettings.coverPhotoMinFiles}
-                maxFiles={checkoutSettings.coverPhotoMaxFiles}
-                required={checkoutSettings.coverPhotoUploadRequired}
-                helpText={checkoutSettings.coverPhotoHelpText}
-                disabled={isSubmitting}
-                onChange={handleCoverUploadsChange}
-              />
-            ) : null}
 
             <div className="border border-stone-200 bg-white p-6 md:p-8">
               <h2 className="border-b border-stone-100 pb-4 text-2xl font-semibold text-stone-900">
@@ -796,8 +778,8 @@ export function CheckoutClient({
               <div className="border-b border-stone-100 pb-6 text-sm text-stone-600">
                 <SummaryRow
                   label="Cover photos"
-                  value={`${coverPhotos.length}/${checkoutSettings.coverPhotoMaxFiles}`}
-                  isPositive={coverPhotos.length >= checkoutSettings.coverPhotoMinFiles}
+                  value={`${checkoutCoverPhotos.length}/${checkoutSettings.coverPhotoMaxFiles}`}
+                  isPositive={checkoutCoverPhotos.length >= checkoutSettings.coverPhotoMinFiles}
                 />
               </div>
             ) : null}

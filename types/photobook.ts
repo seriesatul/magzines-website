@@ -28,6 +28,7 @@ export type PhotobookCartPhoto = {
   name: string;
   size: number;
   mimeType?: string;
+  sortOrder?: number;
 };
 
 export type PhotobookCartItem = {
@@ -42,6 +43,7 @@ export type PhotobookCartItem = {
   customMessage?: string;
   uploadLaterOnWhatsApp?: boolean;
   photos?: Array<PhotobookCartPhoto>;
+  coverPhotos?: Array<PhotobookCartPhoto>;
   photosCount?: number;
   layoutMetadata?: PhotobookLayoutMetadata;
 };
