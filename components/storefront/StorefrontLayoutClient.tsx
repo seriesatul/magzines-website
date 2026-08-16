@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { Facebook, Instagram, Linkedin, MessageCircle, ShoppingBag, User, Youtube } from "lucide-react";
 import { useCart } from "@/components/storefront/CartProvider";
 import { siteConfig } from "@/config/site";
@@ -27,6 +28,11 @@ export function StorefrontLayoutClient({
   contactSettings
 }: StorefrontLayoutClientProps): React.JSX.Element {
   const { itemCount } = useCart();
+  const { data: session, status } = useSession();
+  const signedInUser = status === "authenticated" ? session.user : null;
+  const profileLabel = signedInUser?.name || signedInUser?.email || "Account";
+  const profileImage = signedInUser?.image || null;
+  const profileInitial = getProfileInitial(profileLabel);
   const socialLinks = [
     { label: "Instagram", href: contactSettings.instagramUrl, icon: Instagram },
     { label: "Facebook", href: contactSettings.facebookUrl, icon: Facebook },
@@ -61,12 +67,20 @@ export function StorefrontLayoutClient({
 
           <div className="flex items-center gap-3">
             <Link
-              href="/sign-in"
-              className="inline-flex h-10 w-10 items-center justify-center gap-2 border border-stone-200 text-sm font-medium text-stone-700 transition hover:border-brand hover:text-brand sm:w-auto sm:px-3 sm:py-2"
-              aria-label="Sign in"
+              href={signedInUser ? "/account" : "/sign-in"}
+              className="inline-flex h-10 items-center justify-center gap-2 border border-stone-200 px-3 text-sm font-medium text-stone-700 transition hover:border-brand hover:text-brand"
+              aria-label={signedInUser ? `Open account for ${profileLabel}` : "Sign in"}
             >
-              <User className="h-4 w-4" aria-hidden="true" />
-              <span className="sr-only sm:not-sr-only">Sign in</span>
+              <span
+                className="inline-flex h-6 w-6 items-center justify-center border border-stone-200 bg-stone-50 bg-cover bg-center text-[10px] font-bold uppercase text-stone-900"
+                style={profileImage ? { backgroundImage: `url(${JSON.stringify(profileImage)})` } : undefined}
+                aria-hidden="true"
+              >
+                {profileImage ? null : signedInUser ? profileInitial : <User className="h-3.5 w-3.5" />}
+              </span>
+              <span className="hidden max-w-[140px] truncate sm:inline">
+                {signedInUser ? profileLabel : "Sign in"}
+              </span>
             </Link>
             <Link
               href="/cart"
@@ -166,4 +180,8 @@ export function StorefrontLayoutClient({
       </footer>
     </div>
   );
+}
+
+function getProfileInitial(label: string): string {
+  return label.trim().charAt(0).toUpperCase() || "A";
 }

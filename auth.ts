@@ -177,7 +177,9 @@ export const authConfig = {
   ],
   session: {
     // Required to support both Resend & Credentials providers simultaneously
-    strategy: "jwt" 
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60,
+    updateAge: 24 * 60 * 60
   },
   trustHost: env.AUTH_TRUST_HOST,
   pages: {
@@ -198,6 +200,14 @@ export const authConfig = {
       }
 
       try {
+        const googleProfileUpdates = googleProfile?.email_verified
+          ? {
+              emailVerified: new Date(),
+              ...(googleProfile.name ? { name: googleProfile.name } : {}),
+              ...(googleProfile.picture ? { image: googleProfile.picture } : {})
+            }
+          : {};
+
         await db.user.updateMany({
           where: {
             OR: identityFilters
@@ -205,7 +215,7 @@ export const authConfig = {
           data: {
             lastLoginAt: new Date(),
             deletedAt: null,
-            ...(googleProfile?.email_verified ? { emailVerified: new Date() } : {})
+            ...googleProfileUpdates
           }
         });
       } catch (error) {
@@ -229,9 +239,15 @@ export const authConfig = {
     // Map database properties into the signed JWT token upon sign-in
     jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
+        if (user.id) {
+          token.id = user.id;
+        }
+
         token.role = user.role || UserRole.CUSTOMER;
         token.phone = user.phone || null;
+        token.name = user.name || null;
+        token.email = user.email || null;
+        token.picture = user.image || null;
       }
       return token;
     },
@@ -241,6 +257,16 @@ export const authConfig = {
         session.user.id = token.id as string;
         session.user.role = token.role as UserRole;
         session.user.phone = (token.phone as string) || null;
+
+        if (typeof token.name === "string") {
+          session.user.name = token.name;
+        }
+
+        if (typeof token.email === "string") {
+          session.user.email = token.email;
+        }
+
+        session.user.image = typeof token.picture === "string" ? token.picture : null;
       }
       return session;
     }

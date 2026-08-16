@@ -198,8 +198,8 @@ export function CheckoutClient({
   ]);
 
   const paymentOptions = useMemo(
-    () => buildPaymentOptions(checkoutSettings, checkoutSubtotalPaise),
-    [checkoutSettings, checkoutSubtotalPaise]
+    () => buildPaymentOptions(checkoutSettings),
+    [checkoutSettings]
   );
 
   const selectablePaymentTypes = useMemo(
@@ -883,10 +883,7 @@ function SummaryRow({
   );
 }
 
-function buildPaymentOptions(
-  settings: CheckoutSettings,
-  subtotalPaise: number
-): PaymentOption[] {
+function buildPaymentOptions(settings: CheckoutSettings): PaymentOption[] {
   const options: PaymentOption[] = [];
 
   if (settings.paymentPrepaidEnabled) {
@@ -899,17 +896,11 @@ function buildPaymentOptions(
   }
 
   if (settings.paymentPartialCodEnabled) {
-    const disabledReason =
-      subtotalPaise < settings.partialCodMinOrderPaise
-        ? `Available above ${formatPaise(settings.partialCodMinOrderPaise)} order value.`
-        : undefined;
-
     options.push({
       type: "PARTIAL_COD",
       title: `Partial COD (${formatPaise(settings.partialCodAdvancePaise)} advance)`,
       description: `Pay ${formatPaise(settings.partialCodAdvancePaise)} now and the balance on delivery.`,
-      icon: Landmark,
-      ...(disabledReason ? { disabledReason } : {})
+      icon: Landmark
     });
   }
 

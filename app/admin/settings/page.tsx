@@ -1,7 +1,7 @@
 import React from "react";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Globe2, ImagePlus, Mail, MessageCircle, Save, Settings, Truck, Wallet, UploadCloud } from "lucide-react";
+import { CreditCard, Globe2, ImagePlus, Mail, MessageCircle, Save, Settings, Truck, Wallet, UploadCloud } from "lucide-react";
 import { env } from "@/config/env";
 import { AdminSettingsToast } from "@/components/admin/AdminSettingsToast";
 import { SettingFieldInput } from "@/components/admin/SettingFieldInput";
@@ -14,6 +14,12 @@ import {
   getCoverUploadSettings,
   normalizeCoverUploadFormValues
 } from "@/lib/cover-upload-settings";
+import {
+  buildPaymentMethodSettingUpserts,
+  formatPaymentPaiseAsRupees,
+  getPaymentMethodSettings,
+  normalizePaymentMethodFormValues
+} from "@/lib/payment-method-settings";
 
 export const revalidate = 0;
 
@@ -42,8 +48,6 @@ const SETTINGS_SECTIONS: SettingSection[] = [
     fields: [
       { key: "freeShippingThresholdPaise", name: "freeShippingThresholdRupees", label: "Free Shipping Threshold", kind: "rupees" },
       { key: "defaultShippingFeePaise", name: "defaultShippingFeeRupees", label: "Default Shipping Fee", kind: "rupees" },
-      { key: "partialCodAdvancePaise", name: "partialCodAdvanceRupees", label: "Partial COD Advance", kind: "rupees" },
-      { key: "partialCodFeePaise", name: "partialCodFeeRupees", label: "Partial COD Fee", kind: "rupees" },
       { key: "rateLimitRequestsPerMin", name: "rateLimitRequestsPerMin", label: "Requests Per Minute", kind: "number" },
       { key: "completedOrderRetentionDays", name: "completedOrderRetentionDays", label: "Completed Order Retention", kind: "number" }
     ]
@@ -140,10 +144,11 @@ export default async function AdminSettingsPage({
   searchParams
 }: AdminSettingsPageProps): Promise<React.JSX.Element> {
   const { settingsSave, message } = await searchParams;
-  const [settingRow, resolvedSettings, coverUploadSettings] = await Promise.all([
+  const [settingRow, resolvedSettings, coverUploadSettings, paymentMethodSettings] = await Promise.all([
     getSettingRow(),
     getResolvedSettings(),
-    getCoverUploadSettings()
+    getCoverUploadSettings(),
+    getPaymentMethodSettings()
   ]);
 
   async function saveSettings(formData: FormData) {
@@ -152,6 +157,7 @@ export default async function AdminSettingsPage({
     try {
       const current = await getSettingRow();
       const coverUploadValues = normalizeCoverUploadFormValues(formData);
+      const paymentMethodValues = normalizePaymentMethodFormValues(formData);
       const stringSettings = Object.fromEntries(
         STRING_SETTING_KEYS.map((key) => {
           const field = findSettingField(key);
@@ -168,8 +174,7 @@ export default async function AdminSettingsPage({
         update: {
           freeShippingThresholdPaise: parseRupeesToPaise(formData, "freeShippingThresholdRupees"),
           defaultShippingFeePaise: parseRupeesToPaise(formData, "defaultShippingFeeRupees"),
-          partialCodAdvancePaise: parseRupeesToPaise(formData, "partialCodAdvanceRupees"),
-          partialCodFeePaise: parseRupeesToPaise(formData, "partialCodFeeRupees"),
+          partialCodAdvancePaise: paymentMethodValues.partialAdvancePaise,
           rateLimitRequestsPerMin: parsePositiveInteger(formData, "rateLimitRequestsPerMin"),
           completedOrderRetentionDays: parseRetentionDays(formData, "completedOrderRetentionDays"),
           ...stringSettings
@@ -178,15 +183,17 @@ export default async function AdminSettingsPage({
           id: GLOBAL_SETTING_ID,
           freeShippingThresholdPaise: parseRupeesToPaise(formData, "freeShippingThresholdRupees"),
           defaultShippingFeePaise: parseRupeesToPaise(formData, "defaultShippingFeeRupees"),
-          partialCodAdvancePaise: parseRupeesToPaise(formData, "partialCodAdvanceRupees"),
-          partialCodFeePaise: parseRupeesToPaise(formData, "partialCodFeeRupees"),
+          partialCodAdvancePaise: paymentMethodValues.partialAdvancePaise,
           rateLimitRequestsPerMin: parsePositiveInteger(formData, "rateLimitRequestsPerMin"),
           completedOrderRetentionDays: parseRetentionDays(formData, "completedOrderRetentionDays"),
           ...stringSettings
         }
       });
 
-      await db.$transaction(buildCoverUploadSettingUpserts(coverUploadValues));
+      await db.$transaction([
+        ...buildCoverUploadSettingUpserts(coverUploadValues),
+        ...buildPaymentMethodSettingUpserts(paymentMethodValues)
+      ]);
 
       revalidatePath("/admin/settings");
       revalidatePath("/checkout");
@@ -272,6 +279,89 @@ export default async function AdminSettingsPage({
           );
         })}
 
+        <section className="border border-stone-200 bg-white p-6 md:p-8">
+          <div className="mb-6 flex items-start justify-between gap-6 border-b border-stone-200 pb-5">
+            <div>
+              <div className="mb-2 flex items-center gap-3 text-brand">
+                <span className="h-px w-6 bg-brand" />
+                <span className="text-[0.68rem] font-medium uppercase tracking-[0.12em]">
+                  Payment control
+                </span>
+              </div>
+              <h2 className="font-serif text-2xl font-bold leading-none text-stone-900 md:text-3xl">
+                Payment <span className="font-normal italic">Methods</span>
+              </h2>
+            </div>
+            <CreditCard className="mt-1 h-5 w-5 shrink-0 text-stone-900" />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <label className="flex items-start gap-3 border border-stone-200 bg-stone-50 p-4">
+              <input
+                type="checkbox"
+                name="paymentPrepaidEnabled"
+                defaultChecked={paymentMethodSettings.paymentPrepaidEnabled}
+                className="mt-1 h-4 w-4 accent-brand"
+              />
+              <span>
+                <span className="block text-[0.68rem] font-medium uppercase tracking-[0.12em] text-stone-600">
+                  Online payment
+                </span>
+                <span className="mt-1 block text-xs font-light leading-5 text-stone-500">
+                  Razorpay checkout, UPI, cards, and netbanking.
+                </span>
+              </span>
+            </label>
+
+            <label className="flex items-start gap-3 border border-stone-200 bg-stone-50 p-4">
+              <input
+                type="checkbox"
+                name="paymentCodEnabled"
+                defaultChecked={paymentMethodSettings.paymentCodEnabled}
+                className="mt-1 h-4 w-4 accent-brand"
+              />
+              <span>
+                <span className="block text-[0.68rem] font-medium uppercase tracking-[0.12em] text-stone-600">
+                  Cash on delivery
+                </span>
+                <span className="mt-1 block text-xs font-light leading-5 text-stone-500">
+                  Full amount collected when the order arrives.
+                </span>
+              </span>
+            </label>
+
+            <label className="flex items-start gap-3 border border-stone-200 bg-stone-50 p-4">
+              <input
+                type="checkbox"
+                name="paymentPartialCodEnabled"
+                defaultChecked={paymentMethodSettings.paymentPartialCodEnabled}
+                className="mt-1 h-4 w-4 accent-brand"
+              />
+              <span>
+                <span className="block text-[0.68rem] font-medium uppercase tracking-[0.12em] text-stone-600">
+                  Partial payment
+                </span>
+                <span className="mt-1 block text-xs font-light leading-5 text-stone-500">
+                  Advance online, remaining balance on delivery.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <label className="mt-4 block max-w-xl border border-stone-200 bg-stone-50 p-4">
+            <span className="text-[0.68rem] font-medium uppercase tracking-[0.12em] text-stone-600">
+              Partial payment amount
+            </span>
+            <input
+              type="number"
+              name="partialCodAdvanceRupees"
+              min={0}
+              step="0.01"
+              defaultValue={formatPaymentPaiseAsRupees(paymentMethodSettings.partialCodAdvancePaise)}
+              className="mt-3 h-11 w-full border border-stone-200 bg-white px-3 font-mono text-sm text-stone-900 outline-none transition focus:border-brand"
+            />
+          </label>
+        </section>
         <section className="border border-stone-200 bg-white p-6 md:p-8">
           <div className="mb-7 flex items-start justify-between gap-6 border-b border-stone-200 pb-5">
             <div>
@@ -537,7 +627,8 @@ function getSettingsSaveFailureMessage(error: unknown): string {
 }
 
 function isSettingsValidationMessage(message: string): boolean {
-  return message.endsWith("must be a positive rupee amount.") ||
+  return message === "At least one payment method must be enabled." ||
+    message.endsWith("must be a positive rupee amount.") ||
     message.endsWith("must be a positive integer.") ||
     message.endsWith("must be greater than zero.") ||
     message.endsWith("must be between 1 and 365 days.");

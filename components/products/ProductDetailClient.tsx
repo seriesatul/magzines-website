@@ -480,7 +480,7 @@ export function ProductDetailClient({
                 <textarea
                   value={customizationDescription}
                   onChange={(event) => setCustomizationDescription(event.target.value.slice(0, 1000))}
-                  placeholder="Describe your cover text, page sequence, theme, captions, cropping notes, or any special print instructions..."
+                  placeholder="Add details according to the magazines you selected."
                   className="mt-2 min-h-[150px] w-full resize-none border border-stone-200 bg-[#FAFAF8] p-4 text-sm font-light leading-6 outline-none placeholder:text-stone-400 focus:border-brand"
                 />
               </label>

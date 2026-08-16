@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { db } from "@/server/db/client";
 import { formatPaise } from "@/server/db/money";
-import { ShoppingBag, MapPin, User, ChevronRight, ExternalLink } from "lucide-react";
+import { CustomerSignOutButton } from "@/components/account/CustomerSignOutButton";
+import { ExternalLink, MapPin, User } from "lucide-react";
 
 export const metadata = {
   title: "My Account | Hearts & Beans",
@@ -18,6 +19,10 @@ export default async function AccountDashboardPage(): Promise<React.JSX.Element>
   if (!session?.user || !session.user.email) {
     redirect("/sign-in");
   }
+
+  const profileName = session.user.name || session.user.email;
+  const profileImage = session.user.image || null;
+  const profileInitial = getProfileInitial(profileName);
 
   // 2. Fetch authenticated order history cleanly from the database
   const orders = await db.order.findMany({
@@ -37,24 +42,37 @@ export default async function AccountDashboardPage(): Promise<React.JSX.Element>
       <div className="mx-auto max-w-[1200px] py-12 space-y-12">
         
         {/* Profile Welcome Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-stone-200 pb-8 gap-6">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-brand">
-              <User className="h-4 w-4" />
-              <span className="text-xs font-bold uppercase tracking-wider">Client Dashboard</span>
+        <div className="flex flex-col justify-between gap-6 border-b border-stone-200 pb-8 md:flex-row md:items-end">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
+            <div
+              className="flex h-24 w-24 shrink-0 items-center justify-center border border-stone-200 bg-white bg-cover bg-center font-serif text-4xl font-black text-stone-900"
+              style={profileImage ? { backgroundImage: `url(${JSON.stringify(profileImage)})` } : undefined}
+              role="img"
+              aria-label={`${profileName} profile image`}
+            >
+              {profileImage ? null : profileInitial}
             </div>
-            <h1 className="font-serif text-5xl font-black text-stone-900 tracking-tight leading-none">
-              Welcome back, <br />
-              <span className="font-normal italic text-stone-700">{session.user.name || "Valued Customer"}</span>
-            </h1>
-            <p className="text-xs font-mono text-stone-400">
-              Registered Email: {session.user.email}
-            </p>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-brand">
+                <User className="h-4 w-4" />
+                <span className="text-xs font-bold uppercase tracking-wider">Client Dashboard</span>
+              </div>
+              <h1 className="font-serif text-5xl font-black leading-none tracking-tight text-stone-900">
+                Welcome back, <br />
+                <span className="font-normal italic text-stone-700">{profileName}</span>
+              </h1>
+              <p className="text-xs font-mono text-stone-400">
+                Registered Email: {session.user.email}
+              </p>
+            </div>
           </div>
 
-          <div className="bg-stone-900 text-white p-4 text-xs font-light space-y-1 rounded-none max-w-xs border border-stone-800">
-            <span className="block font-semibold uppercase tracking-wider text-brand text-[10px]">Active Orders</span>
-            <span className="block font-serif text-lg font-bold">{orders.length} custom editions</span>
+          <div className="max-w-xs space-y-3">
+            <div className="rounded-none border border-stone-800 bg-stone-900 p-4 text-xs font-light text-white">
+              <span className="block text-[10px] font-semibold uppercase tracking-wider text-brand">Active Orders</span>
+              <span className="block font-serif text-lg font-bold">{orders.length} custom editions</span>
+            </div>
+            <CustomerSignOutButton />
           </div>
         </div>
 
@@ -71,7 +89,7 @@ export default async function AccountDashboardPage(): Promise<React.JSX.Element>
               <div className="border border-stone-200 bg-white p-12 text-center rounded-none space-y-4">
                 <p className="font-serif text-2xl font-light italic text-stone-500">No print editions yet</p>
                 <p className="text-xs font-light text-stone-400">
-                  You haven't placed any custom magazine orders yet. Explore our formats to start.
+                  You haven&apos;t placed any custom magazine orders yet. Explore our formats to start.
                 </p>
                 <Link
                   href="/#products"
@@ -191,4 +209,8 @@ export default async function AccountDashboardPage(): Promise<React.JSX.Element>
       </div>
     </main>
   );
+}
+
+function getProfileInitial(label: string): string {
+  return label.trim().charAt(0).toUpperCase() || "C";
 }

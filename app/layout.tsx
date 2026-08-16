@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { siteConfig } from "@/config/site";
 import { ToastProvider } from "@/components/ToastProvider";
+import { AuthSessionProvider } from "@/components/auth/AuthSessionProvider";
 import { NavigationLoadingIndicator } from "@/components/loading/NavigationLoadingIndicator";
 
 export const metadata: Metadata = {
@@ -52,11 +53,13 @@ export default function RootLayout({ children }: RootLayoutProps): React.JSX.Ele
         />
       </head>
       <body className="bg-stone-50 font-sans text-stone-900 antialiased selection:bg-brand/10 selection:text-brand">
-        <Suspense fallback={null}>
-          <NavigationLoadingIndicator />
-        </Suspense>
-        {children}
-        <ToastProvider />
+        <AuthSessionProvider>
+          <Suspense fallback={null}>
+            <NavigationLoadingIndicator />
+          </Suspense>
+          {children}
+          <ToastProvider />
+        </AuthSessionProvider>
       </body>
     </html>
   );

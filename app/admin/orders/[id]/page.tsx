@@ -19,6 +19,7 @@ import {
 import {
   ArrowLeft,
   ClipboardList,
+  CreditCard,
   Download,
   ExternalLink,
   Image as ImageIcon,
@@ -600,6 +601,43 @@ export default async function AdminOrderDetailPage({
         {/* Right Column: Status controllers, Shipping, & Internal Comments */}
         <div className="space-y-6 lg:sticky lg:top-24">
           
+          {/* Payment summary */}
+          <div className="border border-stone-200 bg-white p-6 md:p-8 rounded-none space-y-4">
+            <div className="flex items-center gap-2 text-brand text-xs font-bold uppercase tracking-wider">
+              <CreditCard className="h-4 w-4" />
+              Payment Summary
+            </div>
+            <div className="space-y-3 border-t border-stone-100 pt-4 text-xs text-stone-600">
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-light">Method</span>
+                <span className="text-right font-bold uppercase tracking-wider text-stone-900">
+                  {formatPaymentType(order.paymentType)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-light">Total order</span>
+                <span className="font-mono font-semibold text-stone-900">{formatPaise(order.totalPaise)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-light">Payable now</span>
+                <span className="font-mono font-semibold text-stone-900">{formatPaise(order.payableNowPaise)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-light">Payable on delivery</span>
+                <span className="font-mono font-semibold text-stone-900">{formatPaise(order.payableOnDeliveryPaise)}</span>
+              </div>
+              {order.codFeePaise > 0 ? (
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-light">COD fee</span>
+                  <span className="font-mono font-semibold text-stone-900">{formatPaise(order.codFeePaise)}</span>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-light">Shipping</span>
+                <span className="font-mono font-semibold text-stone-900">{formatPaise(order.shippingFeePaise)}</span>
+              </div>
+            </div>
+          </div>
           {/* Status update selector form */}
           <div className="border border-stone-200 bg-white p-6 md:p-8 rounded-none space-y-4">
             <h3 className="text-xs font-bold uppercase tracking-wider text-stone-400">Manufacturing Pipeline</h3>
@@ -715,4 +753,15 @@ export default async function AdminOrderDetailPage({
       </div>
     </div>
   );
+}
+function formatPaymentType(paymentType: string): string {
+  if (paymentType === "PARTIAL_COD") {
+    return "Partial payment";
+  }
+
+  if (paymentType === "FULL_COD") {
+    return "Cash on delivery";
+  }
+
+  return "Online payment";
 }

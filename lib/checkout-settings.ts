@@ -9,7 +9,6 @@ export type CheckoutSettings = CoverUploadSettings & {
   paymentPrepaidEnabled: boolean;
   paymentCodEnabled: boolean;
   paymentPartialCodEnabled: boolean;
-  partialCodMinOrderPaise: number;
   partialCodAdvancePaise: number;
   partialCodFeePaise: number;
   freeShippingThresholdPaise: number;
@@ -21,8 +20,6 @@ const CHECKOUT_SETTING_KEYS = [
   "payment_cod_enabled",
   "payment_partial_cod_enabled",
   "partial_cod_enabled",
-  "partial_cod_min_order_rupees",
-  "partial_cod_min_order_paise",
   "partial_cod_advance_paise",
   "partial_cod_fee_paise",
   "free_shipping_threshold_paise",
@@ -66,10 +63,6 @@ export async function getCheckoutSettings(): Promise<CheckoutSettings> {
       settingMap.get("payment_partial_cod_enabled"),
       legacyPartialEnabled
     ),
-    partialCodMinOrderPaise: parseRupeesToPaise(
-      settingMap.get("partial_cod_min_order_rupees"),
-      parsePaise(settingMap.get("partial_cod_min_order_paise"), 0)
-    ),
     partialCodAdvancePaise,
     partialCodFeePaise,
     freeShippingThresholdPaise,
@@ -80,7 +73,7 @@ export async function getCheckoutSettings(): Promise<CheckoutSettings> {
 
 export function isPaymentTypeEnabled(
   paymentType: CheckoutPaymentType,
-  subtotalPaise: number,
+  _subtotalPaise: number,
   settings: CheckoutSettings
 ): boolean {
   if (paymentType === "PREPAID") {
@@ -91,10 +84,7 @@ export function isPaymentTypeEnabled(
     return settings.paymentCodEnabled;
   }
 
-  return (
-    settings.paymentPartialCodEnabled &&
-    subtotalPaise >= settings.partialCodMinOrderPaise
-  );
+  return settings.paymentPartialCodEnabled;
 }
 
 function parseBoolean(value: string | undefined, fallback: boolean): boolean {
@@ -107,20 +97,4 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   }
 
   return fallback;
-}
-
-function parsePaise(value: string | undefined, fallback: number): number {
-  if (!value || !/^\d+$/.test(value)) {
-    return fallback;
-  }
-
-  return Number.parseInt(value, 10);
-}
-
-function parseRupeesToPaise(value: string | undefined, fallbackPaise: number): number {
-  if (!value || !/^\d+(\.\d{1,2})?$/.test(value.trim())) {
-    return fallbackPaise;
-  }
-
-  return Math.round(Number.parseFloat(value) * 100);
 }

@@ -204,8 +204,16 @@ export default async function AdminOrdersListPage({
                       <p className="font-semibold text-stone-900">{order.customerName}</p>
                       <p className="font-mono text-[10px] text-stone-400">{order.customerPhone}</p>
                     </td>
-                    <td className="py-4 space-y-1">
+                    <td className="py-4 space-y-1.5">
                       <p className="font-mono font-semibold text-stone-900">{formatPaise(order.totalPaise)}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                        {formatPaymentType(order.paymentType)}
+                      </p>
+                      {order.paymentType === "PARTIAL_COD" ? (
+                        <p className="font-mono text-[10px] leading-4 text-stone-500">
+                          Now {formatPaise(order.payableNowPaise)} / Delivery {formatPaise(order.payableOnDeliveryPaise)}
+                        </p>
+                      ) : null}
                       <span className={`inline-block px-1.5 py-0.5 text-[9px] uppercase font-bold rounded-none ${
                         order.paymentStatus === PaymentStatus.CAPTURED
                           ? "bg-emerald-50 text-emerald-700"
@@ -302,4 +310,15 @@ function formatOrderStatus(status: OrderStatus): string {
   }
 
   return "Cancelled";
+}
+function formatPaymentType(paymentType: string): string {
+  if (paymentType === "PARTIAL_COD") {
+    return "Partial payment";
+  }
+
+  if (paymentType === "FULL_COD") {
+    return "Cash on delivery";
+  }
+
+  return "Online payment";
 }
