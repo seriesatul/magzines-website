@@ -72,6 +72,7 @@ export async function GET(
             id: true,
             originalName: true,
             objectKey: true,
+            purpose: true,
             createdAt: true
           }
         }
@@ -101,7 +102,7 @@ export async function GET(
       }
 
       zipFiles.push({
-        filename: createUniqueFilename(order.orderNumber, photo.originalName, index, usedNames),
+        filename: `${photo.purpose === "COVER" ? "cover" : "interior"}/${createUniqueFilename(order.orderNumber, photo.originalName, index, usedNames)}`,
         data: objectResult.data,
         modifiedAt: photo.createdAt
       });

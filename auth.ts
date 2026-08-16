@@ -7,6 +7,7 @@ import Google, { type GoogleProfile } from "next-auth/providers/google";
 import { env } from "@/config/env";
 import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
+import { hashOtp } from "@/server/services/otp";
 
 class AdminLoginServiceUnavailableError extends CredentialsSignin {
   override code = "login_service_unavailable";
@@ -120,10 +121,11 @@ export const authConfig = {
           return null;
         }
 
+        const token = hashOtp(email, otp);
         const tokenRecord = await db.verificationToken.findFirst({
           where: {
             identifier: email,
-            token: otp,
+            token,
             expires: { gte: new Date() }
           }
         });
@@ -133,7 +135,7 @@ export const authConfig = {
         }
 
         await db.verificationToken.deleteMany({
-          where: { identifier: email, token: otp }
+          where: { identifier: email, token }
         });
 
         const existingUser = await db.user.findUnique({

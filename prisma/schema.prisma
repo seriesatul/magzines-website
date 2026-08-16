@@ -393,6 +393,8 @@ model PhotoUpload {
   userId         String?
   cartId         String?
   orderId        String?
+  purpose        String       @default("CONTENT")
+  sortOrder      Int          @default(0)
   originalName   String
   objectKey      String       @unique
   publicUrl      String?
@@ -407,6 +409,7 @@ model PhotoUpload {
 
   @@index([cartId])
   @@index([orderId])
+  @@index([orderId, purpose])
   @@index([userId])
   @@index([status])
 }

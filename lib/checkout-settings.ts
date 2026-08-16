@@ -1,10 +1,11 @@
 import "server-only";
 import { db } from "@/server/db/client";
+import { getCoverUploadSettings, type CoverUploadSettings } from "@/lib/cover-upload-settings";
 import { getIntSetting } from "@/server/services/settings";
 
 export type CheckoutPaymentType = "PREPAID" | "COD" | "PARTIAL_COD";
 
-export type CheckoutSettings = {
+export type CheckoutSettings = CoverUploadSettings & {
   paymentPrepaidEnabled: boolean;
   paymentCodEnabled: boolean;
   paymentPartialCodEnabled: boolean;
@@ -34,7 +35,8 @@ export async function getCheckoutSettings(): Promise<CheckoutSettings> {
     partialCodAdvancePaise,
     partialCodFeePaise,
     freeShippingThresholdPaise,
-    defaultShippingFeePaise
+    defaultShippingFeePaise,
+    coverUploadSettings
   ] = await Promise.all([
     db.siteSetting.findMany({
       where: {
@@ -50,7 +52,8 @@ export async function getCheckoutSettings(): Promise<CheckoutSettings> {
     getIntSetting("partialCodAdvancePaise"),
     getIntSetting("partialCodFeePaise"),
     getIntSetting("freeShippingThresholdPaise"),
-    getIntSetting("defaultShippingFeePaise")
+    getIntSetting("defaultShippingFeePaise"),
+    getCoverUploadSettings()
   ]);
 
   const settingMap = new Map(settings.map((setting) => [setting.key, setting.value]));
@@ -70,7 +73,8 @@ export async function getCheckoutSettings(): Promise<CheckoutSettings> {
     partialCodAdvancePaise,
     partialCodFeePaise,
     freeShippingThresholdPaise,
-    defaultShippingFeePaise
+    defaultShippingFeePaise,
+    ...coverUploadSettings
   };
 }
 

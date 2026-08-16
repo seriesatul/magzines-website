@@ -274,6 +274,9 @@ export default function SignInPage(): React.JSX.Element {
             <input
               required
               type="email"
+              name="email"
+              autoComplete="email"
+              disabled={loginMode === "customer" && isOtpSent}
               value={email}
               onChange={(event) => {
                 setEmail(event.target.value);
@@ -281,7 +284,7 @@ export default function SignInPage(): React.JSX.Element {
                 setMessage(null);
               }}
               placeholder="name@example.com"
-              className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 font-mono text-xs text-stone-900 outline-none focus:border-brand"
+              className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 font-mono text-xs text-stone-900 outline-none transition focus:border-brand disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-400"
             />
           </label>
 
@@ -291,6 +294,8 @@ export default function SignInPage(): React.JSX.Element {
               <input
                 required
                 type="text"
+                name="otp"
+                autoComplete="one-time-code"
                 inputMode="numeric"
                 maxLength={6}
                 value={otp}
@@ -316,7 +321,7 @@ export default function SignInPage(): React.JSX.Element {
                   setError(null);
                 }}
                 placeholder={PASSWORD_PLACEHOLDER}
-                className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 font-mono text-xs text-stone-900 outline-none focus:border-brand"
+                className="mt-2 h-11 w-full border border-stone-200 bg-[#FAFAF8] px-4 font-mono text-xs text-stone-900 outline-none transition focus:border-brand disabled:cursor-not-allowed disabled:border-stone-100 disabled:text-stone-400"
               />
             </label>
           ) : null}

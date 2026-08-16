@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { PaymentType, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { PaymentType } from "@prisma/client";
 import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
 import { getCheckoutSettings, isPaymentTypeEnabled } from "@/lib/checkout-settings";
@@ -15,7 +16,8 @@ const checkoutPhotoSchema = z.object({
   name: z.string().optional(),
   size: z.number().int().nonnegative().optional(),
   mimeType: z.string().trim().optional(),
-  slot: z.number().int().positive().optional()
+  slot: z.number().int().positive().optional(),
+  sortOrder: z.number().int().nonnegative().optional()
 });
 
 const checkoutLayoutPageSchema = z.object({
@@ -67,6 +69,7 @@ const checkoutSchema = z.object({
     .regex(/^[1-9][0-9]{5}$/, "Must be a valid 6-digit Indian pincode."),
   notes: z.string().trim().optional().or(z.literal("")),
   paymentType: z.enum(["PREPAID", "COD", "PARTIAL_COD"]),
+  coverPhotos: z.array(checkoutPhotoSchema).optional().default([]),
   items: z.array(checkoutItemSchema).min(1)
 });
 
@@ -141,6 +144,40 @@ export async function POST(request: Request): Promise<NextResponse> {
         { error: "The selected payment method is not available for this order." },
         { status: 400 }
       );
+    }
+
+    const coverPhotos = Array.from(
+      new Map(
+        payload.coverPhotos
+          .filter((photo) => photo.key && photo.url)
+          .map((photo) => [photo.key, photo] as const)
+      ).values()
+    );
+
+    if (!checkoutSettings.coverPhotoUploadEnabled && coverPhotos.length > 0) {
+      return NextResponse.json(
+        { error: "Cover photo uploads are not enabled for checkout right now." },
+        { status: 400 }
+      );
+    }
+
+    if (checkoutSettings.coverPhotoUploadEnabled) {
+      if (coverPhotos.length > checkoutSettings.coverPhotoMaxFiles) {
+        return NextResponse.json(
+          { error: `Cover photos are limited to ${checkoutSettings.coverPhotoMaxFiles}.` },
+          { status: 400 }
+        );
+      }
+
+      if (
+        checkoutSettings.coverPhotoUploadRequired &&
+        coverPhotos.length < checkoutSettings.coverPhotoMinFiles
+      ) {
+        return NextResponse.json(
+          { error: `Upload at least ${checkoutSettings.coverPhotoMinFiles} cover photo${checkoutSettings.coverPhotoMinFiles === 1 ? "" : "s"}.` },
+          { status: 400 }
+        );
+      }
     }
 
     // 3. Dynamic Shipping Fee Calculation (Rule 3.2)
@@ -255,9 +292,28 @@ export async function POST(request: Request): Promise<NextResponse> {
 
       if (uploadedPhotos.length > 0) {
         await tx.photoUpload.createMany({
-          data: uploadedPhotos.map((photo) => ({
+          data: uploadedPhotos.map((photo, index) => ({
             orderId: createdOrder.id,
+            purpose: "CONTENT",
+            sortOrder: index,
             originalName: photo.name || "client-photo",
+            objectKey: photo.key,
+            publicUrl: photo.url,
+            mimeType: photo.mimeType || "image/jpeg",
+            sizeBytes: photo.size ?? 0,
+            status: "ATTACHED_TO_ORDER"
+          })),
+          skipDuplicates: true
+        });
+      }
+
+      if (coverPhotos.length > 0) {
+        await tx.photoUpload.createMany({
+          data: coverPhotos.map((photo, index) => ({
+            orderId: createdOrder.id,
+            purpose: "COVER",
+            sortOrder: photo.sortOrder ?? index,
+            originalName: photo.name || "cover-photo",
             objectKey: photo.key,
             publicUrl: photo.url,
             mimeType: photo.mimeType || "image/jpeg",

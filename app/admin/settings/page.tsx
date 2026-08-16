@@ -1,7 +1,7 @@
 import React from "react";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Globe2, Mail, MessageCircle, Save, Settings, Truck, Wallet, UploadCloud } from "lucide-react";
+import { Globe2, ImagePlus, Mail, MessageCircle, Save, Settings, Truck, Wallet, UploadCloud } from "lucide-react";
 import { env } from "@/config/env";
 import { AdminSettingsToast } from "@/components/admin/AdminSettingsToast";
 import { SettingFieldInput } from "@/components/admin/SettingFieldInput";
@@ -9,6 +9,11 @@ import { SubmitButton } from "@/components/loading/SubmitButton";
 import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
 import { GLOBAL_SETTING_ID, getResolvedSettings, type DynamicSettingKey } from "@/server/services/settings";
+import {
+  buildCoverUploadSettingUpserts,
+  getCoverUploadSettings,
+  normalizeCoverUploadFormValues
+} from "@/lib/cover-upload-settings";
 
 export const revalidate = 0;
 
@@ -135,9 +140,10 @@ export default async function AdminSettingsPage({
   searchParams
 }: AdminSettingsPageProps): Promise<React.JSX.Element> {
   const { settingsSave, message } = await searchParams;
-  const [settingRow, resolvedSettings] = await Promise.all([
+  const [settingRow, resolvedSettings, coverUploadSettings] = await Promise.all([
     getSettingRow(),
-    getResolvedSettings()
+    getResolvedSettings(),
+    getCoverUploadSettings()
   ]);
 
   async function saveSettings(formData: FormData) {
@@ -145,6 +151,7 @@ export default async function AdminSettingsPage({
 
     try {
       const current = await getSettingRow();
+      const coverUploadValues = normalizeCoverUploadFormValues(formData);
       const stringSettings = Object.fromEntries(
         STRING_SETTING_KEYS.map((key) => {
           const field = findSettingField(key);
@@ -178,6 +185,8 @@ export default async function AdminSettingsPage({
           ...stringSettings
         }
       });
+
+      await db.$transaction(buildCoverUploadSettingUpserts(coverUploadValues));
 
       revalidatePath("/admin/settings");
       revalidatePath("/checkout");
@@ -263,6 +272,98 @@ export default async function AdminSettingsPage({
           );
         })}
 
+        <section className="border border-stone-200 bg-white p-6 md:p-8">
+          <div className="mb-7 flex items-start justify-between gap-6 border-b border-stone-200 pb-5">
+            <div>
+              <div className="mb-2 flex items-center gap-3 text-brand">
+                <span className="h-px w-6 bg-brand" />
+                <span className="text-[0.68rem] font-medium uppercase tracking-[0.12em]">
+                  Order upload
+                </span>
+              </div>
+              <h2 className="font-serif text-2xl font-bold leading-none text-stone-900 md:text-3xl">
+                Cover <span className="font-normal italic">Photo Uploads</span>
+              </h2>
+            </div>
+            <ImagePlus className="mt-1 h-5 w-5 shrink-0 text-stone-900" />
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <label className="flex min-h-28 items-start gap-4 border border-stone-200 bg-stone-50 p-4">
+              <input
+                type="checkbox"
+                name="coverPhotoUploadEnabled"
+                defaultChecked={coverUploadSettings.coverPhotoUploadEnabled}
+                className="mt-1 h-4 w-4 accent-brand"
+              />
+              <span>
+                <span className="block text-[0.68rem] font-medium uppercase tracking-[0.12em] text-stone-600">
+                  Enable cover uploads
+                </span>
+                <span className="mt-2 block text-xs font-light leading-5 text-stone-500">
+                  Adds a cover photo upload section to checkout.
+                </span>
+              </span>
+            </label>
+
+            <label className="flex min-h-28 items-start gap-4 border border-stone-200 bg-stone-50 p-4">
+              <input
+                type="checkbox"
+                name="coverPhotoUploadRequired"
+                defaultChecked={coverUploadSettings.coverPhotoUploadRequired}
+                className="mt-1 h-4 w-4 accent-brand"
+              />
+              <span>
+                <span className="block text-[0.68rem] font-medium uppercase tracking-[0.12em] text-stone-600">
+                  Require before payment
+                </span>
+                <span className="mt-2 block text-xs font-light leading-5 text-stone-500">
+                  Checkout blocks submission until the minimum is uploaded.
+                </span>
+              </span>
+            </label>
+
+            <label className="block border border-stone-200 bg-stone-50 p-4">
+              <span className="text-[0.68rem] font-medium uppercase tracking-[0.12em] text-stone-600">
+                Minimum cover photos
+              </span>
+              <input
+                type="number"
+                name="coverPhotoMinFiles"
+                min={0}
+                max={10}
+                defaultValue={coverUploadSettings.coverPhotoMinFiles}
+                className="mt-3 h-11 w-full border border-stone-200 bg-white px-3 font-mono text-sm text-stone-900 outline-none transition focus:border-brand"
+              />
+            </label>
+
+            <label className="block border border-stone-200 bg-stone-50 p-4">
+              <span className="text-[0.68rem] font-medium uppercase tracking-[0.12em] text-stone-600">
+                Maximum cover photos
+              </span>
+              <input
+                type="number"
+                name="coverPhotoMaxFiles"
+                min={1}
+                max={10}
+                defaultValue={coverUploadSettings.coverPhotoMaxFiles}
+                className="mt-3 h-11 w-full border border-stone-200 bg-white px-3 font-mono text-sm text-stone-900 outline-none transition focus:border-brand"
+              />
+            </label>
+
+            <label className="block border border-stone-200 bg-stone-50 p-4 md:col-span-2">
+              <span className="text-[0.68rem] font-medium uppercase tracking-[0.12em] text-stone-600">
+                Customer-facing cover note
+              </span>
+              <textarea
+                name="coverPhotoHelpText"
+                defaultValue={coverUploadSettings.coverPhotoHelpText}
+                rows={3}
+                className="mt-3 w-full resize-none border border-stone-200 bg-white px-3 py-3 text-sm leading-6 text-stone-900 outline-none transition focus:border-brand"
+              />
+            </label>
+          </div>
+        </section>
         <SubmitButton
           className="inline-flex h-12 items-center gap-2 bg-stone-900 px-8 text-xs font-medium uppercase tracking-[0.12em] text-white transition hover:bg-brand disabled:cursor-wait disabled:bg-stone-600"
           icon={<Save className="h-4 w-4" />}
