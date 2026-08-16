@@ -244,6 +244,9 @@ export default async function OrderTrackingPage({
                 {order.codFeePaise > 0 ? (
                   <SummaryLine label="COD fee" value={formatPaise(order.codFeePaise)} />
                 ) : null}
+                {order.discountPaise > 0 ? (
+                  <SummaryLine label="Discount" value={`-${formatPaise(order.discountPaise)}`} />
+                ) : null}
               </div>
 
               <div className="flex items-center justify-between border-t border-stone-100 pt-4 text-base font-semibold text-stone-900">

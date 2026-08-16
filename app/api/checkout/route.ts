@@ -5,6 +5,7 @@ import type { PaymentType } from "@prisma/client";
 import { db } from "@/server/db/client";
 import { logger } from "@/server/logger/logger";
 import { getCheckoutSettings, isPaymentTypeEnabled } from "@/lib/checkout-settings";
+import { validateCouponForOrder } from "@/lib/coupons";
 import { createRazorpayOrder } from "@/server/payments/razorpay";
 import { sendWhatsAppTemplate } from "@/server/services/whatsapp";
 import { getStringSetting } from "@/server/services/settings";
@@ -69,6 +70,7 @@ const checkoutSchema = z.object({
     .regex(/^[1-9][0-9]{5}$/, "Must be a valid 6-digit Indian pincode."),
   notes: z.string().trim().optional().or(z.literal("")),
   paymentType: z.enum(["PREPAID", "COD", "PARTIAL_COD"]),
+  couponCode: z.string().trim().optional().or(z.literal("")),
   coverPhotos: z.array(checkoutPhotoSchema).optional().default([]),
   items: z.array(checkoutItemSchema).min(1)
 });
@@ -186,12 +188,27 @@ export async function POST(request: Request): Promise<NextResponse> {
         ? 0
         : checkoutSettings.defaultShippingFeePaise;
 
-    // 4. COD fee adjustments
+    // 4. COD fee adjustments and coupon verification
     const codFeePaise =
       payload.paymentType === "PARTIAL_COD" ? checkoutSettings.partialCodFeePaise : 0;
-    const discountPaise = 0; // Handled in coupon verification step
-    
-    const totalPaise = subtotalPaise + shippingFeePaise + codFeePaise - discountPaise;
+    const couponValidation = payload.couponCode
+      ? await validateCouponForOrder({
+          code: payload.couponCode,
+          subtotalPaise,
+          customerPhone: payload.customerPhone
+        })
+      : null;
+
+    if (couponValidation && !couponValidation.valid) {
+      return NextResponse.json(
+        { error: couponValidation.message },
+        { status: 400 }
+      );
+    }
+
+    const appliedCoupon = couponValidation?.valid ? couponValidation : null;
+    const discountPaise = appliedCoupon?.discountPaise ?? 0;
+    const totalPaise = Math.max(subtotalPaise + shippingFeePaise + codFeePaise - discountPaise, 0);
 
     // 5. Calculate payables for split-payment COD models (Rule 3.7)
     let payableNowPaise = 0;
@@ -321,6 +338,17 @@ export async function POST(request: Request): Promise<NextResponse> {
             status: "ATTACHED_TO_ORDER"
           })),
           skipDuplicates: true
+        });
+      }
+
+      if (appliedCoupon) {
+        await tx.couponRedemption.create({
+          data: {
+            couponId: appliedCoupon.coupon.id,
+            orderId: createdOrder.id,
+            customerPhone: payload.customerPhone,
+            discountPaise
+          }
         });
       }
 

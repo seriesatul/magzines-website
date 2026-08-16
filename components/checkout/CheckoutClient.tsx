@@ -15,6 +15,7 @@ import {
   Mail,
   ShoppingBag,
   ShieldCheck,
+  Tag,
   Truck,
   X,
   type LucideIcon
@@ -79,9 +80,19 @@ type PaymentOption = {
   disabledReason?: string;
 };
 
+type AppliedCoupon = {
+  code: string;
+  description: string;
+  discountType: "PERCENTAGE" | "FIXED_AMOUNT";
+  discountPaise: number;
+  discountPercentage: number | null;
+  discountValuePaise: number | null;
+};
+
 const PHONE_REGEX = /^[6-9]\d{9}$/;
 const PINCODE_REGEX = /^[1-9][0-9]{5}$/;
 const DIRECT_CHECKOUT_STORAGE_KEY = "hearts-and-beans-direct-checkout";
+const CART_COUPON_STORAGE_KEY = "hearts-and-beans-coupon-code";
 
 export function CheckoutClient({
   session,
@@ -113,6 +124,11 @@ export function CheckoutClient({
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [directCheckoutItem, setDirectCheckoutItem] = useState<PhotobookCartItem | null>(null);
   const [hasLoadedDirectCheckout, setHasLoadedDirectCheckout] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+  const [hasCheckedInitialCoupon, setHasCheckedInitialCoupon] = useState(false);
 
   useEffect(() => {
     if (session?.user?.name) {
@@ -173,6 +189,21 @@ export function CheckoutClient({
   }, [checkoutItems]);
 
   useEffect(() => {
+    if (!hasLoadedDirectCheckout || hasCheckedInitialCoupon || checkoutSubtotalPaise <= 0) {
+      return;
+    }
+
+    const initialCode = searchParams.get("coupon") || window.localStorage.getItem(CART_COUPON_STORAGE_KEY) || "";
+
+    if (initialCode) {
+      setCouponCode(initialCode);
+      void applyCouponCode(initialCode);
+    }
+
+    setHasCheckedInitialCoupon(true);
+  }, [checkoutSubtotalPaise, hasCheckedInitialCoupon, hasLoadedDirectCheckout, searchParams]);
+
+  useEffect(() => {
     if (!hasLoadedDirectCheckout) {
       return;
     }
@@ -221,7 +252,8 @@ export function CheckoutClient({
     paymentType === "PARTIAL_COD" && selectablePaymentTypes.includes("PARTIAL_COD")
       ? checkoutSettings.partialCodFeePaise
       : 0;
-  const finalTotalPaise = checkoutSubtotalPaise + shippingFeePaise + codFeePaise;
+  const discountPaise = Math.min(appliedCoupon?.discountPaise ?? 0, checkoutSubtotalPaise);
+  const finalTotalPaise = Math.max(checkoutSubtotalPaise + shippingFeePaise + codFeePaise - discountPaise, 0);
   const payableNowPaise =
     paymentType === "PREPAID"
       ? finalTotalPaise
@@ -239,6 +271,8 @@ export function CheckoutClient({
   }
 
   function clearCheckoutState(): void {
+    window.localStorage.removeItem(CART_COUPON_STORAGE_KEY);
+
     if (isDirectCheckout) {
       window.localStorage.removeItem(DIRECT_CHECKOUT_STORAGE_KEY);
       setDirectCheckoutItem(null);
@@ -257,6 +291,71 @@ export function CheckoutClient({
     }
 
     return `/orders/${order.orderNumber}?${params.toString()}`;
+  }
+
+  async function applyCouponCode(codeOverride?: string): Promise<void> {
+    const codeCleaned = (codeOverride ?? couponCode).toUpperCase().trim();
+    setCouponError(null);
+
+    if (!codeCleaned) {
+      setCouponError("Please type a coupon code.");
+      return;
+    }
+
+    if (checkoutSubtotalPaise <= 0) {
+      setCouponError("Add a product before applying a coupon.");
+      return;
+    }
+
+    setIsValidatingCoupon(true);
+
+    try {
+      const inputObj = {
+        json: {
+          code: codeCleaned,
+          cartTotalPaise: checkoutSubtotalPaise,
+          customerPhone: customerPhone.replace(/\D/g, "") || undefined
+        }
+      };
+      const endpoint = `/api/trpc/coupon.validate?input=${encodeURIComponent(JSON.stringify(inputObj))}`;
+      const response = await fetch(endpoint);
+      const rawJson = await response.json();
+      const data = rawJson?.result?.data?.json || rawJson?.result?.data;
+
+      if (!response.ok || !data?.valid) {
+        setCouponError(data?.message || "Invalid or expired coupon code.");
+        setAppliedCoupon(null);
+        window.localStorage.removeItem(CART_COUPON_STORAGE_KEY);
+        return;
+      }
+
+      setAppliedCoupon({
+        code: data.code,
+        description: data.description || "Coupon discount",
+        discountType: data.discountType || "PERCENTAGE",
+        discountPaise: data.discountPaise || 0,
+        discountPercentage: data.discountPercentage ?? null,
+        discountValuePaise: data.discountValuePaise ?? null
+      });
+      setCouponCode("");
+      window.localStorage.setItem(CART_COUPON_STORAGE_KEY, data.code);
+    } catch {
+      setCouponError("Could not validate coupon. Please try again.");
+    } finally {
+      setIsValidatingCoupon(false);
+    }
+  }
+
+  function handleApplyCoupon(event: React.FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    void applyCouponCode();
+  }
+
+  function handleRemoveCoupon(): void {
+    setAppliedCoupon(null);
+    setCouponCode("");
+    setCouponError(null);
+    window.localStorage.removeItem(CART_COUPON_STORAGE_KEY);
   }
 
   function finishCheckout(order: PlacedOrder): void {
@@ -485,6 +584,7 @@ export function CheckoutClient({
         notes: notes.trim() || undefined,
         paymentType,
         coverPhotos: checkoutSettings.coverPhotoUploadEnabled ? checkoutCoverPhotos : [],
+        couponCode: appliedCoupon?.code || undefined,
         items: checkoutItems.map((item) => ({
           id: item.productId || item.id,
           slug: item.slug,
@@ -775,6 +875,50 @@ export function CheckoutClient({
             </div>
 
 
+            <div className="border-b border-stone-100 pb-6">
+              {!appliedCoupon ? (
+                <form onSubmit={handleApplyCoupon} className="space-y-3">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
+                    Apply Coupon
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={couponCode}
+                      onChange={(event) => {
+                        setCouponCode(event.target.value);
+                        setCouponError(null);
+                      }}
+                      placeholder="OFFER50"
+                      className="h-11 min-w-0 flex-1 border border-stone-200 bg-[#FAFAF8] px-3 font-mono text-xs uppercase outline-none transition focus:border-brand"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isValidatingCoupon}
+                      className="h-11 bg-stone-900 px-4 text-[10px] font-bold uppercase tracking-widest text-white transition hover:bg-brand disabled:cursor-wait disabled:bg-stone-600"
+                    >
+                      {isValidatingCoupon ? "Checking" : "Apply"}
+                    </button>
+                  </div>
+                  {couponError ? <p className="text-[11px] font-medium text-red-600">{couponError}</p> : null}
+                </form>
+              ) : (
+                <div className="flex items-center justify-between gap-3 border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+                  <span className="flex min-w-0 items-center gap-2 font-medium">
+                    <Tag className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{appliedCoupon.code} applied</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    className="text-[10px] font-bold uppercase tracking-wider text-red-600 transition hover:text-red-800"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-3 border-b border-stone-100 pb-6 text-sm text-stone-600">
               <SummaryRow label="Subtotal" value={formatPaise(checkoutSubtotalPaise)} />
               <SummaryRow
@@ -784,6 +928,9 @@ export function CheckoutClient({
               />
               {codFeePaise > 0 ? (
                 <SummaryRow label="Partial COD fee" value={formatPaise(codFeePaise)} />
+              ) : null}
+              {discountPaise > 0 && appliedCoupon ? (
+                <SummaryRow label={`Coupon (${appliedCoupon.code})`} value={`-${formatPaise(discountPaise)}`} isPositive />
               ) : null}
             </div>
 

@@ -632,6 +632,12 @@ export default async function AdminOrderDetailPage({
                   <span className="font-mono font-semibold text-stone-900">{formatPaise(order.codFeePaise)}</span>
                 </div>
               ) : null}
+              {order.discountPaise > 0 ? (
+                <div className="flex items-center justify-between gap-4 text-emerald-700">
+                  <span className="font-light">Discount</span>
+                  <span className="font-mono font-semibold">-{formatPaise(order.discountPaise)}</span>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between gap-4">
                 <span className="font-light">Shipping</span>
                 <span className="font-mono font-semibold text-stone-900">{formatPaise(order.shippingFeePaise)}</span>

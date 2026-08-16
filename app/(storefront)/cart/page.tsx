@@ -12,13 +12,18 @@ import { LoadingMark } from "@/components/loading/LoadingMark";
 // Standard Indian shipping rules in Paise (Rule 2)
 const FREE_SHIPPING_THRESHOLD_PAISE = 99900; // Rs.999
 const DEFAULT_SHIPPING_FEE_PAISE = 12000; // Rs.120
+const CART_COUPON_STORAGE_KEY = "hearts-and-beans-coupon-code";
 
 export default function CartPage(): React.JSX.Element {
   const { items, updateQuantity, removeItem, subtotalPaise, clearCart } = useCart();
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<{
     code: string;
-    discountPercent: number;
+    description: string;
+    discountType: "PERCENTAGE" | "FIXED_AMOUNT";
+    discountPaise: number;
+    discountPercentage: number | null;
+    discountValuePaise: number | null;
   } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
@@ -77,14 +82,20 @@ export default function CartPage(): React.JSX.Element {
       // Support nested Superjson object key access structures
       const data = rawJson?.result?.data?.json || rawJson?.result?.data;
 
-      if (!data) {
-        setCouponError("Invalid or expired coupon code.");
+      if (!data?.valid) {
+        setCouponError(data?.message || "Invalid or expired coupon code.");
         setAppliedCoupon(null);
+        window.localStorage.removeItem(CART_COUPON_STORAGE_KEY);
       } else {
         setAppliedCoupon({
-      code: data.code,
-      discountPercent: data.discountPercentage || 10
-    });
+          code: data.code,
+          description: data.description || "Coupon discount",
+          discountType: data.discountType || "PERCENTAGE",
+          discountPaise: data.discountPaise || 0,
+          discountPercentage: data.discountPercentage ?? null,
+          discountValuePaise: data.discountValuePaise ?? null
+        });
+        window.localStorage.setItem(CART_COUPON_STORAGE_KEY, data.code);
         setCouponCode("");
       }
     } catch {
@@ -97,12 +108,18 @@ export default function CartPage(): React.JSX.Element {
   const handleRemoveCoupon = () => {
     setAppliedCoupon(null);
     setCouponError(null);
+    window.localStorage.removeItem(CART_COUPON_STORAGE_KEY);
   };
 
   // 4. Calculate final basket totals using precise integer math (Rule 2)
   const discountPaise = useMemo(() => {
     if (!appliedCoupon) return 0;
-    return Math.floor((subtotalPaise * appliedCoupon.discountPercent) / 100);
+
+    if (appliedCoupon.discountType === "PERCENTAGE") {
+      return Math.floor((subtotalPaise * (appliedCoupon.discountPercentage ?? 0)) / 100);
+    }
+
+    return Math.min(appliedCoupon.discountValuePaise ?? appliedCoupon.discountPaise, subtotalPaise);
   }, [subtotalPaise, appliedCoupon]);
 
   const finalTotalPaise = useMemo(() => {
@@ -354,7 +371,7 @@ export default function CartPage(): React.JSX.Element {
               </div>
 
               <Link
-                href="/checkout"
+                href={appliedCoupon ? `/checkout?coupon=${encodeURIComponent(appliedCoupon.code)}` : "/checkout"}
                 className="inline-flex h-14 w-full items-center justify-center bg-stone-900 px-8 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-brand rounded-none"
               >
                 Proceed to Checkout
