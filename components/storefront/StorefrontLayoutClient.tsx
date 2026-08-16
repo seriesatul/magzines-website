@@ -138,6 +138,9 @@ export function StorefrontLayoutClient({
               <Link href="/refunds" className="hover:text-brand">
                 Refunds
               </Link>
+              <Link href="/sign-in?mode=admin&callbackUrl=/admin" className="hover:text-brand">
+                Admin Login
+              </Link>
             </div>
             {socialLinks.length > 0 || xUrl ? (
               <div className="mt-6 flex items-center gap-3">

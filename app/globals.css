@@ -118,3 +118,85 @@ body {
     animation: none;
   }
 }
+.legal-document-content,
+.legal-document-editor {
+  overflow-wrap: anywhere;
+}
+
+.legal-document-content > * + *,
+.legal-document-editor > * + * {
+  margin-top: 1.25rem;
+}
+
+.legal-document-content h2,
+.legal-document-editor h2 {
+  color: #0A0A0A;
+  font-family: var(--font-playfair), Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.legal-document-content h3,
+.legal-document-content h4,
+.legal-document-editor h3,
+.legal-document-editor h4 {
+  color: #0A0A0A;
+  font-family: var(--font-playfair), Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.legal-document-content p,
+.legal-document-editor p {
+  margin-top: 0.75rem;
+}
+
+.legal-document-content ul,
+.legal-document-content ol,
+.legal-document-editor ul,
+.legal-document-editor ol {
+  margin-top: 0.9rem;
+  padding-left: 1.35rem;
+}
+
+.legal-document-content ul,
+.legal-document-editor ul {
+  list-style: disc;
+}
+
+.legal-document-content ol,
+.legal-document-editor ol {
+  list-style: decimal;
+}
+
+.legal-document-content li + li,
+.legal-document-editor li + li {
+  margin-top: 0.45rem;
+}
+
+.legal-document-content strong,
+.legal-document-content b,
+.legal-document-editor strong,
+.legal-document-editor b {
+  color: #0A0A0A;
+  font-weight: 700;
+}
+
+.legal-document-content blockquote,
+.legal-document-editor blockquote {
+  border-left: 2px solid #C1440E;
+  color: #5C5750;
+  font-family: var(--font-playfair), Georgia, serif;
+  font-style: italic;
+  padding-left: 1rem;
+}
+
+.legal-document-content a,
+.legal-document-editor a {
+  color: #C1440E;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
