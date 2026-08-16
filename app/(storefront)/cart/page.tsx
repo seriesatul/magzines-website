@@ -211,11 +211,6 @@ export default function CartPage(): React.JSX.Element {
                         <p className="text-[11px] text-stone-500 font-light mt-1">
                           <strong>Photos:</strong> {item.uploadLaterOnWhatsApp ? "WhatsApp upload later" : `${item.photosCount} originals attached`}
                         </p>
-                        {item.coverPhotos && item.coverPhotos.length > 0 ? (
-                          <p className="text-[11px] text-stone-500 font-light mt-1">
-                            <strong>Cover photos:</strong> {item.coverPhotos.length} cover-only attached
-                          </p>
-                        ) : null}
                         {item.layoutMetadata && item.layoutMetadata.length > 0 && (
                           <p className="text-[11px] text-stone-500 font-light mt-1">
                             <strong>Blueprint:</strong> {item.layoutMetadata.length} page spreads arranged

@@ -309,9 +309,7 @@ export default async function AdminOrderDetailPage({
   const orderItemsWithLayout = orderItems as Array<
     (typeof orderItems)[number] & { layoutMetadata: unknown }
   >;
-  const coverPhotos = uploadedPhotos.filter((photo) => photo.purpose === "COVER");
   const contentPhotos = uploadedPhotos.filter((photo) => photo.purpose !== "COVER");
-  const displayedPhotos = [...coverPhotos, ...contentPhotos];
 
   // Server Action 1: Handle Order Status & Tracking updates (Rule 7.4 & 5.3)
   async function updateOrderStatus(formData: FormData) {
@@ -449,11 +447,11 @@ export default async function AdminOrderDetailPage({
               <ImageIcon className="h-4 w-4 text-brand" />
               <h2 className="font-serif text-2xl font-black text-stone-900">Attached Customer Photos</h2>
               <span className="ml-auto text-xs font-semibold font-mono text-stone-400">
-                {contentPhotos.length} Interior / {coverPhotos.length} Cover
+                {contentPhotos.length} Photos
               </span>
             </div>
 
-            {uploadedPhotos.length === 0 ? (
+            {contentPhotos.length === 0 ? (
               <div className="bg-[#FAFAF8] border border-dashed border-stone-200 p-10 text-center text-xs font-light text-stone-500">
                 {order.uploadPhotosLater ? (
                   <span className="text-brand font-semibold flex flex-col gap-1 items-center justify-center">
@@ -498,7 +496,7 @@ export default async function AdminOrderDetailPage({
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {displayedPhotos.map((photo, idx) => (
+                  {contentPhotos.map((photo, idx) => (
                     <article key={photo.id} className="border border-stone-200 bg-[#FAFAF8] p-3">
                       <a
                         href={photo.publicUrl || "#"}
@@ -515,9 +513,6 @@ export default async function AdminOrderDetailPage({
                         <div className="absolute inset-0 flex items-center justify-center bg-black/45 text-[9px] font-bold uppercase tracking-widest text-white opacity-0 transition group-hover:opacity-100">
                           Open Full
                         </div>
-                        <span className="absolute left-2 top-2 bg-stone-900 px-2 py-1 text-[8px] font-bold uppercase tracking-widest text-white">
-                          {photo.purpose === "COVER" ? "Cover" : "Interior"}
-                        </span>
                       </a>
                       <div className="mt-3 min-w-0 space-y-2">
                         <p className="truncate text-[11px] font-bold text-stone-900">

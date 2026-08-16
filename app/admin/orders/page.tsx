@@ -84,7 +84,10 @@ export default async function AdminOrdersListPage({
       take: limit,
       include: {
         address: true,
-        _count: { select: { photos: true } }
+        photos: {
+          where: { purpose: { not: "COVER" } },
+          select: { id: true }
+        }
       }
     }),
     db.order.count({ where })
@@ -223,11 +226,11 @@ export default async function AdminOrdersListPage({
                     </td>
                     <td className="py-4 text-right">
                       <div className="inline-flex items-center gap-2">
-                        {order._count.photos > 0 ? (
+                        {order.photos.length > 0 ? (
                           <a
                             href={`/api/admin/orders/${order.id}/photos`}
                             className="inline-flex h-9 w-9 items-center justify-center border border-stone-200 bg-white transition hover:border-brand hover:text-brand rounded-none"
-                            title={`Download ${order._count.photos} original photos`}
+                            title={`Download ${order.photos.length} original photos`}
                           >
                             <Download className="h-3.5 w-3.5" />
                           </a>

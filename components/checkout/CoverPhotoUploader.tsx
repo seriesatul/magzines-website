@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ImagePlus, RefreshCw, Trash2 } from "lucide-react";
+import { ImagePlus, Trash2 } from "lucide-react";
 import { LoadingMark } from "@/components/loading/LoadingMark";
 
 export type CoverUploadLifecycle = "idle" | "busy" | "ready" | "error";
@@ -222,49 +222,49 @@ export function CoverPhotoUploader({
     }
   }
 
-  const uploadCountLabel = maxFiles === 1 ? "Single cover image" : `Up to ${maxFiles} cover images`;
-  const requiredLabel = required ? `Required minimum ${minFiles}` : "Optional";
+  const uploadCountLabel = maxFiles === 1 ? "1 cover" : `Max ${maxFiles}`;
+  const requiredLabel = required ? `Min ${minFiles}` : "Optional";
 
   return (
-    <section className="border border-stone-200 bg-white p-6 md:p-8">
-      <div className="grid gap-5 border-b border-stone-100 pb-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+    <section className="border border-stone-200 bg-[#FAFAF8] p-4">
+      <div className="flex flex-col gap-3 border-b border-stone-200 pb-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="mb-3 flex items-center gap-3 text-brand">
-            <span className="h-px w-6 bg-brand" />
-            <span className="text-[0.68rem] font-bold uppercase tracking-[0.12em]">
-              Cover Direction
+          <div className="mb-1.5 flex items-center gap-2 text-brand">
+            <span className="h-px w-5 bg-brand" />
+            <span className="text-[0.62rem] font-bold uppercase tracking-[0.12em]">
+              Cover Only
             </span>
           </div>
-          <h2 className="font-serif text-3xl font-black leading-none text-stone-900">
+          <h3 className="font-serif text-xl font-black leading-none text-stone-900">
             Cover <span className="font-normal italic">Photos</span>
-          </h2>
-          <p className="mt-3 max-w-[62ch] text-sm font-light leading-6 text-stone-600">
+          </h3>
+          <p className="mt-2 max-w-[56ch] text-xs font-light leading-5 text-stone-600">
             {helpText}
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-[10px] font-bold uppercase tracking-widest text-stone-500">
-          <span className="border border-stone-200 bg-[#FAFAF8] px-3 py-2">{uploadCountLabel}</span>
-          <span className="border border-stone-200 bg-[#FAFAF8] px-3 py-2">{requiredLabel}</span>
+        <div className="flex shrink-0 gap-2 text-[9px] font-bold uppercase tracking-widest text-stone-500">
+          <span className="border border-stone-200 bg-white px-2.5 py-1.5">{uploadCountLabel}</span>
+          <span className="border border-stone-200 bg-white px-2.5 py-1.5">{requiredLabel}</span>
         </div>
       </div>
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
+      <div className="mt-4 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
         <label
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => {
             event.preventDefault();
             processFiles(Array.from(event.dataTransfer.files));
           }}
-          className="flex min-h-[220px] cursor-pointer flex-col items-center justify-center gap-4 border border-dashed border-stone-300 bg-[#FAFAF8] p-6 text-center transition hover:border-brand"
+          className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 border border-dashed border-stone-300 bg-white px-4 py-4 text-center transition hover:border-brand"
         >
-          <span className="flex h-14 w-14 items-center justify-center border border-stone-900 bg-white text-brand">
-            <ImagePlus className="h-6 w-6" />
+          <span className="flex h-9 w-9 items-center justify-center border border-stone-900 bg-[#FAFAF8] text-brand">
+            <ImagePlus className="h-4 w-4" />
           </span>
-          <span className="font-serif text-2xl font-black leading-none text-stone-900">
-            Upload <span className="font-normal italic">Cover Art</span>
+          <span className="font-serif text-lg font-black leading-none text-stone-900">
+            Upload <span className="font-normal italic">Cover</span>
           </span>
-          <span className="max-w-[38ch] text-xs font-light leading-5 text-stone-500">
-            JPG, PNG, or WEBP originals. Portrait framing works best for magazine covers.
+          <span className="text-[10px] font-medium uppercase tracking-widest text-stone-400">
+            JPG / PNG / WEBP
           </span>
           <input
             type="file"
@@ -279,10 +279,10 @@ export function CoverPhotoUploader({
           />
         </label>
 
-        <div className="border border-stone-200 bg-[#FAFAF8] p-4">
-          <div className="flex items-center justify-between gap-4 border-b border-stone-200 pb-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-brand">
-              Cover Candidates
+        <div className="border border-stone-200 bg-white p-3">
+          <div className="flex items-center justify-between gap-3 border-b border-stone-100 pb-2">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-brand">
+              Selected Covers
             </p>
             <span className="font-mono text-[10px] text-stone-400">
               {successfulUploads.length}/{maxFiles}
@@ -290,22 +290,22 @@ export function CoverPhotoUploader({
           </div>
 
           {uploads.length > 0 ? (
-            <div className="mt-4 grid max-h-[320px] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
+            <div className="mt-3 flex max-h-36 gap-2 overflow-x-auto pb-1">
               {uploads.map((upload, index) => (
-                <article key={upload.id} className="border border-stone-200 bg-white p-2">
+                <article key={upload.id} className="w-20 shrink-0 border border-stone-200 bg-[#FAFAF8] p-1.5">
                   <div className="relative aspect-[3/4] overflow-hidden bg-stone-900">
                     <img
                       src={upload.previewUrl}
                       alt={upload.file.name}
                       className={`h-full w-full object-cover ${upload.status === "error" ? "grayscale" : ""}`}
                     />
-                    <span className="absolute left-2 top-2 bg-stone-900 px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-white">
-                      Cover {index + 1}
+                    <span className="absolute left-1 top-1 bg-stone-900 px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wider text-white">
+                      {index + 1}
                     </span>
                     {upload.status === "uploading" || upload.status === "pending" ? (
-                      <div className="absolute inset-x-0 bottom-0 bg-stone-900/90 p-2">
-                        <div className="mb-1 flex justify-between text-[8px] font-bold uppercase tracking-wider text-white">
-                          <span>Uploading</span>
+                      <div className="absolute inset-x-0 bottom-0 bg-stone-900/90 p-1.5">
+                        <div className="mb-1 flex justify-between text-[7px] font-bold uppercase tracking-wider text-white">
+                          <span>Upload</span>
                           <span>{upload.progress}%</span>
                         </div>
                         <div className="h-1 bg-white/20">
@@ -314,7 +314,7 @@ export function CoverPhotoUploader({
                       </div>
                     ) : null}
                     {upload.status === "success" ? (
-                      <span className="absolute right-2 top-2 bg-brand px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-white">
+                      <span className="absolute right-1 top-1 bg-brand px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wider text-white">
                         Ready
                       </span>
                     ) : null}
@@ -322,45 +322,39 @@ export function CoverPhotoUploader({
                       <button
                         type="button"
                         onClick={() => retryUpload(upload.id)}
-                        className="absolute inset-0 flex items-center justify-center gap-2 bg-red-950/85 text-[9px] font-bold uppercase tracking-widest text-white"
+                        className="absolute inset-0 flex items-center justify-center bg-red-950/85 text-[8px] font-bold uppercase tracking-widest text-white"
                       >
-                        <RefreshCw className="h-3.5 w-3.5" />
                         Retry
                       </button>
                     ) : null}
                     <button
                       type="button"
                       onClick={() => removeUpload(upload.id)}
-                      className="absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center border border-stone-900 bg-white text-stone-900 transition hover:bg-brand hover:text-white"
+                      className="absolute bottom-1 right-1 inline-flex h-6 w-6 items-center justify-center border border-stone-900 bg-white text-stone-900 transition hover:bg-brand hover:text-white"
                       aria-label={`Remove ${upload.file.name}`}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
-                  <div className="mt-2 min-w-0">
-                    <p className="truncate text-[11px] font-bold text-stone-900">{upload.file.name}</p>
-                    <p className="mt-1 text-[10px] font-mono text-stone-400">
-                      {formatFileSize(upload.file.size)}
-                    </p>
-                  </div>
+                  <p className="mt-1 truncate text-[9px] font-bold text-stone-900">{upload.file.name}</p>
                 </article>
               ))}
             </div>
           ) : (
-            <div className="mt-4 flex min-h-[180px] items-center justify-center border border-dashed border-stone-300 bg-white p-8 text-center">
-              <p className="font-serif text-xl italic text-stone-400">No cover photos uploaded.</p>
+            <div className="mt-3 flex min-h-24 items-center justify-center border border-dashed border-stone-300 bg-[#FAFAF8] px-4 text-center">
+              <p className="font-serif text-base italic text-stone-400">No cover selected.</p>
             </div>
           )}
 
           {lifecycle === "busy" ? (
-            <p className="mt-3 inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-stone-500">
+            <p className="mt-2 inline-flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-stone-500">
               <LoadingMark />
-              Uploading cover photos
+              Uploading cover
             </p>
           ) : null}
 
           {error ? (
-            <p className="mt-3 border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700">
+            <p className="mt-2 border border-red-200 bg-red-50 p-2 text-[11px] font-medium text-red-700">
               {error}
             </p>
           ) : null}
@@ -412,12 +406,4 @@ function getErrorMessage(error: unknown): string {
   }
 
   return "";
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024 * 1024) {
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  }
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

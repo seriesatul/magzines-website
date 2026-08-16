@@ -774,15 +774,6 @@ export function CheckoutClient({
               ))}
             </div>
 
-            {checkoutSettings.coverPhotoUploadEnabled ? (
-              <div className="border-b border-stone-100 pb-6 text-sm text-stone-600">
-                <SummaryRow
-                  label="Cover photos"
-                  value={`${checkoutCoverPhotos.length}/${checkoutSettings.coverPhotoMaxFiles}`}
-                  isPositive={checkoutCoverPhotos.length >= checkoutSettings.coverPhotoMinFiles}
-                />
-              </div>
-            ) : null}
 
             <div className="space-y-3 border-b border-stone-100 pb-6 text-sm text-stone-600">
               <SummaryRow label="Subtotal" value={formatPaise(checkoutSubtotalPaise)} />
